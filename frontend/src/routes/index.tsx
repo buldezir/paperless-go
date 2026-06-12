@@ -72,25 +72,33 @@ export function IndexPage() {
   }, [documents, search, statusFilter])
 
   return (
-    <section className="panel">
-      <div className="panel-header">
+    <section className="flex flex-col gap-6">
+      <div className="flex items-end justify-between gap-4">
         <div>
-          <h2>Documents</h2>
-          <p className="muted">Upload, search, and review AI-extracted metadata.</p>
+          <h2 className="text-xl font-semibold text-gray-900">Documents</h2>
+          <p className="text-sm text-gray-500">Upload, search, and review AI-extracted metadata.</p>
         </div>
-        <Link to="/upload" className="button">
+        <Link
+          to="/upload"
+          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
+        >
           Upload document
         </Link>
       </div>
 
-      <div className="filters">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <input
           type="search"
           placeholder="Search title, tags, summary..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none placeholder:text-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
         />
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 sm:w-48"
+        >
           <option value="all">All statuses</option>
           <option value="pending">Pending</option>
           <option value="processing">Processing</option>
@@ -100,17 +108,19 @@ export function IndexPage() {
         </select>
       </div>
 
-      {loading && <p className="muted">Loading documents...</p>}
-      {error && <p className="error">{error}</p>}
+      {loading && <p className="text-sm text-gray-500">Loading documents...</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && filtered.length === 0 && (
-        <div className="empty-state">
-          <p>No documents yet.</p>
-          <Link to="/upload">Upload your first document</Link>
+        <div className="rounded-lg border border-dashed border-gray-300 bg-white py-12 text-center">
+          <p className="text-sm text-gray-500">No documents yet.</p>
+          <Link to="/upload" className="mt-1 inline-block text-sm font-medium text-gray-900 underline">
+            Upload your first document
+          </Link>
         </div>
       )}
 
-      <div className="document-grid">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((document) => (
           <DocumentCard key={document.id} document={document} />
         ))}

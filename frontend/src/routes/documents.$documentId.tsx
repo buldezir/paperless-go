@@ -114,126 +114,160 @@ export function DocumentDetailPage() {
   }
 
   if (loading) {
-    return <p className="muted">Loading document...</p>
+    return <p className="text-sm text-gray-500">Loading document...</p>
   }
 
   if (!document) {
     return (
-      <section className="panel">
-        <p className="error">{error || 'Document not found.'}</p>
-        <Link to="/">Back to documents</Link>
+      <section className="flex flex-col gap-3">
+        <p className="text-sm text-red-600">{error || 'Document not found.'}</p>
+        <Link to="/" className="text-sm font-medium text-gray-900 underline">
+          Back to documents
+        </Link>
       </section>
     )
   }
 
   return (
-    <section className="panel">
-      <div className="panel-header">
+    <section className="flex flex-col gap-6">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <Link to="/" className="muted back-link">
-            Back to documents
+          <Link to="/" className="text-sm text-gray-500 hover:text-gray-900">
+            &larr; Back to documents
           </Link>
-          <h2>{document.title || 'Untitled document'}</h2>
-          <p className="muted">Status: {document.processing_status}</p>
+          <h2 className="mt-1 text-xl font-semibold text-gray-900">
+            {document.title || 'Untitled document'}
+          </h2>
+          <p className="text-sm text-gray-500">Status: {document.processing_status}</p>
         </div>
         {document.file && (
-          <a className="button secondary" href={fileUrl(document)} target="_blank" rel="noreferrer">
+          <a
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            href={fileUrl(document)}
+            target="_blank"
+            rel="noreferrer"
+          >
             Open file
           </a>
         )}
       </div>
 
       {job && (
-        <div className="job-card">
-          <h3>Processing job</h3>
-          <dl>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <h3 className="mb-3 text-sm font-semibold text-gray-900">Processing job</h3>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <dt>Status</dt>
-              <dd>{job.status}</dd>
+              <dt className="text-xs text-gray-400">Status</dt>
+              <dd className="text-sm text-gray-700">{job.status}</dd>
             </div>
             <div>
-              <dt>OCR provider</dt>
-              <dd>{job.ocr_provider || 'n/a'}</dd>
+              <dt className="text-xs text-gray-400">OCR provider</dt>
+              <dd className="text-sm text-gray-700">{job.ocr_provider || 'n/a'}</dd>
             </div>
             <div>
-              <dt>AI provider</dt>
-              <dd>{job.ai_provider || 'n/a'}</dd>
+              <dt className="text-xs text-gray-400">AI provider</dt>
+              <dd className="text-sm text-gray-700">{job.ai_provider || 'n/a'}</dd>
             </div>
             <div>
-              <dt>Prompt version</dt>
-              <dd>{job.prompt_version || 'n/a'}</dd>
+              <dt className="text-xs text-gray-400">Prompt version</dt>
+              <dd className="text-sm text-gray-700">{job.prompt_version || 'n/a'}</dd>
             </div>
             {job.error_message && (
-              <div>
-                <dt>Error</dt>
-                <dd className="error">{job.error_message}</dd>
+              <div className="col-span-2 sm:col-span-4">
+                <dt className="text-xs text-gray-400">Error</dt>
+                <dd className="text-sm text-red-600">{job.error_message}</dd>
               </div>
             )}
           </dl>
         </div>
       )}
 
-      <form className="detail-grid" onSubmit={onSave}>
-        <label>
+      <form
+        className="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-white p-6 sm:grid-cols-2"
+        onSubmit={onSave}
+      >
+        <label className={labelClass}>
           Title
           <input
+            className={inputClass}
             value={document.title ?? ''}
             onChange={(event) => setDocument({ ...document, title: event.target.value })}
           />
         </label>
 
-        <label>
+        <label className={labelClass}>
           Document date
           <input
             type="date"
+            className={inputClass}
             value={document.document_date?.slice(0, 10) ?? ''}
             onChange={(event) => setDocument({ ...document, document_date: event.target.value })}
           />
         </label>
 
-        <label>
+        <label className={labelClass}>
           Document type
           <input
+            className={inputClass}
             value={document.document_type ?? ''}
             onChange={(event) => setDocument({ ...document, document_type: event.target.value })}
           />
         </label>
 
-        <label className="full-width">
+        <label className={`${labelClass} sm:col-span-2`}>
           Purpose
           <input
+            className={inputClass}
             value={document.purpose ?? ''}
             onChange={(event) => setDocument({ ...document, purpose: event.target.value })}
           />
         </label>
 
-        <label className="full-width">
+        <label className={`${labelClass} sm:col-span-2`}>
           Tags (comma separated)
-          <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} />
+          <input
+            className={inputClass}
+            value={tagInput}
+            onChange={(event) => setTagInput(event.target.value)}
+          />
         </label>
 
-        <label className="full-width">
+        <label className={`${labelClass} sm:col-span-2`}>
           Summary
           <textarea
             rows={4}
+            className={inputClass}
             value={document.summary ?? ''}
             onChange={(event) => setDocument({ ...document, summary: event.target.value })}
           />
         </label>
 
-        <label className="full-width">
+        <label className={`${labelClass} sm:col-span-2`}>
           OCR text
-          <textarea rows={10} readOnly value={document.ocr_text ?? ''} />
+          <textarea
+            rows={10}
+            readOnly
+            className={`${inputClass} bg-gray-50 font-mono text-xs`}
+            value={document.ocr_text ?? ''}
+          />
         </label>
 
-        <div className="full-width actions">
-          {message && <p className="success">{message}</p>}
-          {error && <p className="error">{error}</p>}
-          <button type="submit" className="button" disabled={saving}>
+        <div className="flex items-center gap-4 sm:col-span-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
             {saving ? 'Saving...' : 'Save corrections'}
           </button>
+          {message && <p className="text-sm text-green-600">{message}</p>}
+          {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       </form>
     </section>
   )
 }
+
+const labelClass = 'flex flex-col gap-1.5 text-sm font-medium text-gray-700'
+const inputClass =
+  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900'

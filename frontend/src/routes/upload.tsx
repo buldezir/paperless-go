@@ -36,27 +36,33 @@ export function UploadPage() {
   }
 
   return (
-    <section className="panel narrow">
-      <div className="panel-header">
-        <div>
-          <h2>Upload document</h2>
-          <p className="muted">Supported formats: PDF, JPEG, PNG, WebP, plain text.</p>
-        </div>
+    <section className="mx-auto flex max-w-xl flex-col gap-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">Upload document</h2>
+        <p className="text-sm text-gray-500">Supported formats: PDF, JPEG, PNG, WebP, plain text.</p>
       </div>
 
-      <form className="stack" onSubmit={onSubmit}>
-        <label className="file-drop">
+      <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+        <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center transition-colors hover:border-gray-400">
           <input
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,application/pdf,image/*,text/plain"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            className="hidden"
           />
-          <span>{file ? file.name : 'Choose a file or drop it here'}</span>
+          <span className="text-sm font-medium text-gray-900">
+            {file ? file.name : 'Choose a file'}
+          </span>
+          {!file && <span className="text-xs text-gray-400">or drop it here</span>}
         </label>
 
-        {error && <p className="error">{error}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button type="submit" className="button" disabled={uploading || !file}>
+        <button
+          type="submit"
+          disabled={uploading || !file}
+          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
           {uploading ? 'Uploading...' : 'Upload and process'}
         </button>
       </form>
