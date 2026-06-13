@@ -3,9 +3,12 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var xmlBlockRE = regexp.MustCompile(`(?s)<[^>]+>.*?</[^>]+>`)
 
 const (
 	JobStatusPending     = "pending"
@@ -51,11 +54,7 @@ func (m *ExtractedMetadata) Validate() error {
 }
 
 func ParseExtractedMetadata(raw string) (*ExtractedMetadata, error) {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-	raw = strings.TrimSpace(raw)
+	raw = normalizeExtractionJSON(raw)
 
 	var metadata ExtractedMetadata
 	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
@@ -65,4 +64,70 @@ func ParseExtractedMetadata(raw string) (*ExtractedMetadata, error) {
 		return nil, err
 	}
 	return &metadata, nil
+}
+
+func normalizeExtractionJSON(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+
+	// Some models (e.g. MiniMax M3) wrap reasoning in XML-like tags before JSON.
+	for strings.HasPrefix(raw, "<") {
+		stripped := strings.TrimSpace(xmlBlockRE.ReplaceAllString(raw, ""))
+		if stripped == raw {
+			break
+		}
+		raw = stripped
+	}
+
+	if !strings.HasPrefix(raw, "{") {
+		if jsonObj := extractJSONObject(raw); jsonObj != "" {
+			raw = jsonObj
+		}
+	}
+
+	return strings.TrimSpace(raw)
+}
+
+func extractJSONObject(s string) string {
+	start := strings.IndexByte(s, '{')
+	if start < 0 {
+		return ""
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(s); i++ {
+		ch := s[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			switch ch {
+			case '\\':
+				escaped = true
+			case '"':
+				inString = false
+			}
+			continue
+		}
+
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return s[start : i+1]
+			}
+		}
+	}
+
+	return ""
 }

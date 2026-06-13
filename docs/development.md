@@ -86,10 +86,15 @@ Works out of the box. Plain text files return their actual content. Other files 
 
 ### Google Cloud Vision
 
+Uses the official [Go client library](https://docs.cloud.google.com/vision/docs/detect-labels-image-client-libraries).
+
 ```env
 OCR_PROVIDER=google_vision
 OCR_API_KEY=your-google-api-key
 ```
+
+- **Images** — `BatchAnnotateImages` with `DOCUMENT_TEXT_DETECTION` via `images:annotate`
+- **PDFs** — `BatchAnnotateFiles` via `files:annotate` (base64 upload, no Cloud Storage). Pages are processed in batches of up to 5 per request.
 
 ## Useful commands
 

@@ -56,3 +56,14 @@ func TestParseExtractedMetadataStripsMarkdownFence(t *testing.T) {
 		t.Fatalf("expected title Test, got %q", metadata.Title)
 	}
 }
+
+func TestParseExtractedMetadataStripsReasoningTags(t *testing.T) {
+	raw := "<think>\nThe user wants JSON metadata.\n</think>\n{\"title\":\"Invoice 001\",\"confidence\":0.9}"
+	metadata, err := models.ParseExtractedMetadata(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metadata.Title != "Invoice 001" {
+		t.Fatalf("expected title Invoice 001, got %q", metadata.Title)
+	}
+}
