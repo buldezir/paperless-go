@@ -14,6 +14,7 @@ export function DocumentDetailPage() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
+  const [showProcessingJob, setShowProcessingJob] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
@@ -260,10 +261,38 @@ export function DocumentDetailPage() {
               Open file
             </a>
           )}
+          {job && (
+            <button
+              type="button"
+              onClick={() => setShowProcessingJob((visible) => !visible)}
+              aria-label={showProcessingJob ? 'Hide processing job details' : 'Show processing job details'}
+              aria-pressed={showProcessingJob}
+              title={showProcessingJob ? 'Hide processing job' : 'Show processing job'}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors cursor-pointer ${
+                showProcessingJob
+                  ? 'border-gray-900 bg-gray-900 text-white hover:bg-gray-700'
+                  : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
-      {job && (
+      {job && showProcessingJob && (
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <h3 className="mb-3 text-sm font-semibold text-gray-900">Processing job</h3>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
