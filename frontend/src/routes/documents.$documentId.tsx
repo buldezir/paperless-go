@@ -11,6 +11,7 @@ export function DocumentDetailPage() {
   const [documentTypeInput, setDocumentTypeInput] = useState('')
   const [correspondentInput, setCorrespondentInput] = useState('')
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
   const [error, setError] = useState('')
@@ -112,7 +113,7 @@ export function DocumentDetailPage() {
 
   async function onSave(event: FormEvent) {
     event.preventDefault()
-    if (!document) {
+    if (!document || !editing) {
       return
     }
 
@@ -188,6 +189,7 @@ export function DocumentDetailPage() {
 
       setDocument(updated)
       setMessage('Metadata saved.')
+      setEditing(false)
       const refreshed = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
         expand: 'tags,document_type,correspondent',
       })
@@ -306,7 +308,8 @@ export function DocumentDetailPage() {
         <label className={labelClass}>
           Title
           <input
-            className={inputClass}
+            className={fieldClass(editing)}
+            readOnly={!editing}
             value={document.title ?? ''}
             onChange={(event) => setDocument({ ...document, title: event.target.value })}
           />
@@ -321,7 +324,8 @@ export function DocumentDetailPage() {
           Document date
           <input
             type="date"
-            className={inputClass}
+            className={fieldClass(editing)}
+            readOnly={!editing}
             value={document.document_date?.slice(0, 10) ?? ''}
             onChange={(event) => setDocument({ ...document, document_date: event.target.value })}
           />
@@ -330,7 +334,8 @@ export function DocumentDetailPage() {
         <label className={labelClass}>
           Document type
           <input
-            className={inputClass}
+            className={fieldClass(editing)}
+            readOnly={!editing}
             value={documentTypeInput}
             onChange={(event) => setDocumentTypeInput(event.target.value)}
           />
@@ -345,7 +350,8 @@ export function DocumentDetailPage() {
         <label className={labelClass}>
           Correspondent
           <input
-            className={inputClass}
+            className={fieldClass(editing)}
+            readOnly={!editing}
             value={correspondentInput}
             onChange={(event) => setCorrespondentInput(event.target.value)}
           />
@@ -360,7 +366,8 @@ export function DocumentDetailPage() {
         <label className={`${labelClass} sm:col-span-2`}>
           Purpose
           <input
-            className={inputClass}
+            className={fieldClass(editing)}
+            readOnly={!editing}
             value={document.purpose ?? ''}
             onChange={(event) => setDocument({ ...document, purpose: event.target.value })}
           />
@@ -374,7 +381,8 @@ export function DocumentDetailPage() {
         <label className={`${labelClass} sm:col-span-2`}>
           Tags (comma separated)
           <input
-            className={inputClass}
+            className={fieldClass(editing)}
+            readOnly={!editing}
             value={tagInput}
             onChange={(event) => setTagInput(event.target.value)}
           />
@@ -383,8 +391,9 @@ export function DocumentDetailPage() {
         <label className={`${labelClass} sm:col-span-2`}>
           Summary
           <textarea
-            rows={4}
-            className={inputClass}
+            rows={8}
+            className={textareaClass(editing)}
+            readOnly={!editing}
             value={document.summary ?? ''}
             onChange={(event) => setDocument({ ...document, summary: event.target.value })}
           />
@@ -398,21 +407,34 @@ export function DocumentDetailPage() {
         <label className={`${labelClass} sm:col-span-2`}>
           OCR text
           <textarea
-            rows={10}
+            rows={18}
             readOnly
-            className={`${inputClass} bg-gray-50 font-mono text-xs`}
+            className={`${textareaClass(false)} min-h-96 font-mono text-xs leading-relaxed cursor-not-allowed`}
             value={document.ocr_text ?? ''}
           />
         </label>
 
         <div className="flex items-center gap-4 sm:col-span-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save corrections'}
-          </button>
+          {editing ? (
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? 'Saving...' : 'Save corrections'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault()
+                setEditing(true)
+              }}
+              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 cursor-pointer"
+            >
+              Unblock editing
+            </button>
+          )}
           {message && <p className="text-sm text-green-600">{message}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
@@ -424,3 +446,13 @@ export function DocumentDetailPage() {
 const labelClass = 'flex flex-col gap-1.5 text-sm font-medium text-gray-700'
 const inputClass =
   'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
+const readonlyClass =
+  'cursor-default border-gray-200 bg-gray-100/70 text-gray-700 shadow-inner focus:border-gray-200 focus:ring-0'
+
+function fieldClass(editing: boolean) {
+  return editing ? inputClass : `${inputClass} ${readonlyClass}`
+}
+
+function textareaClass(editing: boolean) {
+  return `${fieldClass(editing)} min-h-48 resize-y`
+}
