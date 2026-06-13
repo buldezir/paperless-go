@@ -70,6 +70,11 @@ export type ProcessingJobRecord = {
 
 export type ReprocessMode = 'full' | 'extraction'
 
+export type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export function fileUrl(record: DocumentRecord, filename?: string) {
   return pb.files.getURL(record, filename ?? record.file)
 }
@@ -84,6 +89,28 @@ export async function reprocessDocument(documentId: string, mode: ReprocessMode 
     status: 'pending',
     job_type: mode,
   })
+}
+
+export async function chatWithDocument(documentId: string, messages: ChatMessage[]) {
+  await ensureAuth()
+
+  const response = await fetch(`${pbUrl}/api/app/documents/${documentId}/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: pb.authStore.token,
+    },
+    body: JSON.stringify({ messages }),
+  })
+
+  const data = (await response.json()) as { message?: ChatMessage; detail?: string }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Failed to get AI response')
+  }
+  if (!data.message) {
+    throw new Error('AI response was empty')
+  }
+  return data.message
 }
 
 export async function ensureAuth() {

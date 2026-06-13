@@ -13,6 +13,7 @@ import (
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/osutils"
+	"paperless-go/backend/internal/appapi"
 	"paperless-go/backend/internal/hooks"
 	"paperless-go/backend/internal/ngxapi"
 	"paperless-go/backend/internal/worker"
@@ -46,6 +47,7 @@ func main() {
 	})
 
 	hooks.Register(app)
+	appapi.Register(app)
 	ngxapi.Register(app)
 	worker.Start(app)
 

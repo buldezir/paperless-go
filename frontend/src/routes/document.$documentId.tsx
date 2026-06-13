@@ -232,6 +232,23 @@ export function DocumentDetailPage() {
           <p className="text-sm text-gray-500">Status: {document.processing_status}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Link
+            to="/document/$documentId/ask"
+            params={{ documentId }}
+            aria-disabled={!document.ocr_text?.trim()}
+            title={
+              document.ocr_text?.trim()
+                ? 'Ask questions about this document'
+                : 'OCR text required before asking AI'
+            }
+            className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+              document.ocr_text?.trim()
+                ? 'border-gray-900 bg-gray-900 text-white hover:bg-gray-700'
+                : 'pointer-events-none border-gray-200 bg-gray-100 text-gray-400'
+            }`}
+          >
+            Ask AI
+          </Link>
           <select
             value=""
             onChange={(event) => {
