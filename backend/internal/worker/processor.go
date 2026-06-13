@@ -19,7 +19,10 @@ import (
 
 func Start(app core.App) {
 	cfg := config.Load()
-	ocrProvider := ocr.NewProvider(cfg.OCRProvider, cfg.OCRAPIKey)
+	ocrProvider, err := ocr.NewProvider(cfg.OCRProvider, cfg.OCRAPIKey)
+	if err != nil {
+		log.Fatalf("[worker] OCR provider: %v", err)
+	}
 	aiExtractor := ai.NewExtractor(
 		cfg.OpenCodeGoAPIKey,
 		cfg.OpenCodeGoModel,
@@ -30,6 +33,8 @@ func Start(app core.App) {
 	)
 
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		log.Printf("[worker] starting poll_interval=%s ocr=%s ai=%s model=%s",
+			cfg.WorkerPollInterval, ocrProvider.Name(), aiExtractor.Name(), aiExtractor.Model())
 		go runWorker(app, cfg, ocrProvider, aiExtractor)
 		return e.Next()
 	})
@@ -63,12 +68,19 @@ func processNextJob(app core.App, cfg config.Config, ocrProvider ocr.Provider, a
 	}
 
 	job := jobs[0]
+	log.Printf("[worker] picked job=%s document=%s type=%s retry=%d",
+		job.Id, job.GetString("document"), job.GetString("job_type"), int(job.GetFloat("retry_count")))
 	return app.RunInTransaction(func(txApp core.App) error {
 		return handleJob(txApp, cfg, job, ocrProvider, aiExtractor)
 	})
 }
 
 func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider ocr.Provider, aiExtractor ai.Extractor) error {
+	jobStart := time.Now()
+	documentID := job.GetString("document")
+	jobType := job.GetString("job_type")
+	log.Printf("[worker] job=%s document=%s type=%s starting", job.Id, documentID, jobType)
+
 	job.Set("status", models.JobStatusRunning)
 	job.Set("started_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
 	job.Set("ai_provider", aiExtractor.Name())
@@ -95,24 +107,36 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 
 	var ocrText string
 	var mimeType string
-	switch job.GetString("job_type") {
+	switch jobType {
 	case models.JobTypeExtraction:
 		ocrText = strings.TrimSpace(document.GetString("ocr_text"))
 		if ocrText == "" {
 			return failJob(app, job, document, fmt.Errorf("extraction reprocess requires existing ocr_text"))
 		}
+		log.Printf("[worker] job=%s document=%s skipping OCR, reusing stored text (%d chars)",
+			job.Id, documentID, len(ocrText))
 	default:
+		ocrStart := time.Now()
 		var err error
 		ocrText, mimeType, err = extractOCRText(ctx, app, document, ocrProvider)
 		if err != nil {
 			return failJob(app, job, document, fmt.Errorf("ocr: %w", err))
 		}
+		log.Printf("[worker] job=%s document=%s OCR complete provider=%s mime=%s chars=%d duration=%s",
+			job.Id, documentID, ocrProvider.Name(), mimeType, len(ocrText), time.Since(ocrStart).Round(time.Millisecond))
 	}
 
+	log.Printf("[worker] job=%s document=%s starting AI extraction provider=%s model=%s ocr_chars=%d",
+		job.Id, documentID, aiExtractor.Name(), aiExtractor.Model(), len(ocrText))
+	aiStart := time.Now()
 	metadata, err := aiExtractor.ExtractMetadata(ctx, ocrText)
 	if err != nil {
+		log.Printf("[worker] job=%s document=%s AI extraction failed duration=%s: %v",
+			job.Id, documentID, time.Since(aiStart).Round(time.Millisecond), err)
 		retryCount := int(job.GetFloat("retry_count"))
 		if retryCount < cfg.WorkerMaxRetries {
+			log.Printf("[worker] job=%s document=%s scheduling retry %d/%d",
+				job.Id, documentID, retryCount+1, cfg.WorkerMaxRetries)
 			job.Set("retry_count", retryCount+1)
 			job.Set("status", models.JobStatusPending)
 			job.Set("error_message", err.Error())
@@ -124,17 +148,24 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		}
 		return failJob(app, job, document, fmt.Errorf("ai extraction: %w", err))
 	}
+	log.Printf("[worker] job=%s document=%s AI extraction complete duration=%s confidence=%.2f title=%q type=%q tags=%d",
+		job.Id, documentID, time.Since(aiStart).Round(time.Millisecond), metadata.Confidence,
+		truncateForLog(metadata.Title, 80), truncateForLog(metadata.DocumentType, 40), len(metadata.Tags))
 
-	if job.GetString("job_type") != models.JobTypeExtraction {
+	if jobType != models.JobTypeExtraction {
 		document.Set("ocr_text", ocrText)
 	}
 	applyExtractedMetadata(document, metadata, cfg.OCRResultLanguage)
 	if err := applyDocumentType(app, document, metadata, cfg.OCRResultLanguage); err != nil {
 		return failJob(app, job, document, fmt.Errorf("document type: %w", err))
 	}
+	log.Printf("[worker] job=%s document=%s document_type=%s",
+		job.Id, documentID, truncateForLog(document.GetString("document_type"), 40))
 	if err := applyCorrespondent(app, document, metadata, cfg.OCRResultLanguage); err != nil {
 		return failJob(app, job, document, fmt.Errorf("correspondent: %w", err))
 	}
+	log.Printf("[worker] job=%s document=%s correspondent=%s",
+		job.Id, documentID, truncateForLog(document.GetString("correspondent"), 40))
 	document.Set("confidence", metadata.Confidence)
 	document.Set("people_or_organizations", metadata.PeopleOrOrganizations)
 	document.Set("metadata_source", aiExtractor.Model())
@@ -148,6 +179,7 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		return failJob(app, job, document, fmt.Errorf("tags: %w", err))
 	}
 	document.Set("tags", tagIDs)
+	log.Printf("[worker] job=%s document=%s applied %d tags", job.Id, documentID, len(tagIDs))
 
 	status := models.DocStatusCompleted
 	jobStatus := models.JobStatusCompleted
@@ -166,14 +198,19 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	job.Set("error_message", "")
 	_ = mimeType
 
+	log.Printf("[worker] job=%s document=%s finished status=%s duration=%s",
+		job.Id, documentID, jobStatus, time.Since(jobStart).Round(time.Millisecond))
 	return app.Save(job)
 }
 
 func extractOCRText(ctx context.Context, app core.App, document *core.Record, provider ocr.Provider) (string, string, error) {
+	documentID := document.Id
 	fileName := document.GetString("file")
 	if fileName == "" {
 		return "", "", fmt.Errorf("document has no file")
 	}
+
+	log.Printf("[worker] document=%s OCR starting file=%q provider=%s", documentID, fileName, provider.Name())
 
 	fsys, err := app.NewFilesystem()
 	if err != nil {
@@ -204,6 +241,7 @@ func extractOCRText(ctx context.Context, app core.App, document *core.Record, pr
 	}
 
 	mimeType := guessMimeType(fileName)
+	log.Printf("[worker] document=%s OCR calling provider mime=%s tmp=%s", documentID, mimeType, filepath.Base(tmpPath))
 	text, err := provider.ExtractText(ctx, tmpPath, mimeType)
 	if err != nil {
 		return "", mimeType, err
@@ -577,6 +615,14 @@ func ensureTags(app core.App, names []string) ([]string, error) {
 }
 
 func failJob(app core.App, job *core.Record, document *core.Record, err error) error {
+	documentID := ""
+	if document != nil {
+		documentID = document.Id
+	} else {
+		documentID = job.GetString("document")
+	}
+	log.Printf("[worker] job=%s document=%s failed: %v", job.Id, documentID, err)
+
 	job.Set("status", models.JobStatusFailed)
 	job.Set("finished_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
 	job.Set("error_message", truncateError(err.Error(), 1900))
@@ -616,4 +662,12 @@ func truncateError(msg string, max int) string {
 		return msg
 	}
 	return msg[:max]
+}
+
+func truncateForLog(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }

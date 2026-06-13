@@ -43,8 +43,8 @@ All variables live in `.env` at the project root (see `.env.example`).
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `OCR_PROVIDER` | `mock` | OCR provider name (`mock`, `google_vision`) |
-| `OCR_API_KEY` | empty | Google Cloud Vision API key when using `google_vision` |
+| `OCR_PROVIDER` | `google_vision` | OCR provider name (`google_vision`) |
+| `OCR_API_KEY` | empty | Google Cloud Vision API key (required) |
 | `OCR_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, `purpose`, and `document_type` are stored in this language; originals go in `*_original` fields. Tags and document types are created in both languages when a translation is available. |
 | `OPENCODE_GO_API_KEY` | empty | OpenCode Go API key |
 | `OPENCODE_GO_MODEL` | `deepseek-v4-flash` | OpenCode Go model ID |
@@ -81,12 +81,6 @@ Without an API key, the backend uses a mock AI extractor for local development.
 
 ## OCR setup
 
-### Mock OCR (default)
-
-Works out of the box. Plain text files return their actual content. Other files get sample OCR text suitable for testing AI extraction.
-
-### Google Cloud Vision
-
 Uses the official [Go client library](https://docs.cloud.google.com/vision/docs/detect-labels-image-client-libraries).
 
 ```env
@@ -113,5 +107,6 @@ cd backend && go run . migrate create "your_migration_name"
 ## Troubleshooting
 
 - **Upload succeeds but stays pending:** ensure the backend server is running; the worker starts with `serve`.
+- **OCR fails:** verify `OCR_API_KEY` is set and Vision API is enabled for your Google Cloud project.
 - **AI extraction fails:** verify `OPENCODE_GO_API_KEY` and model name. Check the processing job error on the document detail page.
 - **Auth errors in frontend:** delete PocketBase data dir (`backend/pb_data`) and restart to recreate collections, then reload the app.

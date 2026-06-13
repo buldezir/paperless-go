@@ -8,7 +8,7 @@ services:
     ports:
       - "8090:8090"
     environment:
-      OCR_PROVIDER: mock
+      OCR_PROVIDER: google_vision
       OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:-}
       OPENCODE_GO_MODEL: ${OPENCODE_GO_MODEL:-deepseek-v4-flash}
     volumes:

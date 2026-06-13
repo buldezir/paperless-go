@@ -1,6 +1,8 @@
 package hooks
 
 import (
+	"log"
+
 	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase/core"
 	"paperless-go/backend/internal/models"
@@ -72,5 +74,7 @@ func createProcessingJob(app core.App, documentID string) (*core.Record, error) 
 		return nil, err
 	}
 
+	log.Printf("[worker] created job=%s document=%s type=%s task_id=%s",
+		job.Id, documentID, models.JobTypeFull, job.GetString("task_id"))
 	return job, nil
 }

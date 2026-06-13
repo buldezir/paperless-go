@@ -6,7 +6,7 @@ Document storage MVP built with Go + PocketBase and a React + TanStack Router fr
 
 - **Backend:** Go, [PocketBase as a framework](https://pocketbase.io/docs/use-as-framework/)
 - **Frontend:** React, TanStack Router, PocketBase JS SDK
-- **OCR:** Mock provider for local dev, optional Google Cloud Vision
+- **OCR:** Google Cloud Vision (requires `OCR_API_KEY`)
 - **AI:** [OpenCode Go](https://opencode.ai/docs/go/) with mock fallback when no API key is set
 
 ## Project layout
@@ -53,9 +53,8 @@ See [docs/development.md](docs/development.md) for the full list.
 
 Minimum for local dev:
 
-- Backend runs with mock OCR and mock AI if keys are empty
-- Set `OPENCODE_GO_API_KEY` to use real AI extraction
-- Set `OCR_PROVIDER=google_vision` and `OCR_API_KEY` for cloud OCR
+- Set `OCR_API_KEY` for Google Cloud Vision OCR
+- Set `OPENCODE_GO_API_KEY` to use AI extraction
 
 ## Features
 

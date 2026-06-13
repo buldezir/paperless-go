@@ -26,7 +26,7 @@ func Load() Config {
 	maxRetries, _ := strconv.Atoi(getEnv("WORKER_MAX_RETRIES", "3"))
 
 	return Config{
-		OCRProvider:         getEnv("OCR_PROVIDER", "mock"),
+		OCRProvider:         getEnv("OCR_PROVIDER", "google_vision"),
 		OCRAPIKey:           os.Getenv("OCR_API_KEY"),
 		OCRResultLanguage:   strings.ToLower(strings.TrimSpace(os.Getenv("OCR_RESULT_LANGUAGE"))),
 		OpenCodeGoAPIKey:    os.Getenv("OPENCODE_GO_API_KEY"),

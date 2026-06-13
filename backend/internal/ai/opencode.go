@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -81,6 +82,11 @@ func (e *OpenCodeGoExtractor) ExtractMetadata(ctx context.Context, ocrText strin
 		return nil, fmt.Errorf("OPENCODE_GO_API_KEY is not configured")
 	}
 
+	inputChars := len(ocrText)
+	sentChars := len(truncate(ocrText, 12000))
+	log.Printf("[ai] extraction starting provider=%s model=%s prompt_ver=%s ocr_chars=%d sent_chars=%d result_lang=%q",
+		e.Name(), e.model, e.promptVer, inputChars, sentChars, e.resultLanguage)
+
 	reqBody := map[string]any{
 		"model": e.model,
 		"messages": []map[string]string{
@@ -106,8 +112,11 @@ func (e *OpenCodeGoExtractor) ExtractMetadata(ctx context.Context, ocrText strin
 	req.Header.Set("Authorization", "Bearer "+e.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
+	requestStart := time.Now()
+	log.Printf("[ai] POST %s request_bytes=%d", url, len(body))
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
+		log.Printf("[ai] request failed duration=%s: %v", time.Since(requestStart).Round(time.Millisecond), err)
 		return nil, fmt.Errorf("opencode go request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -116,6 +125,8 @@ func (e *OpenCodeGoExtractor) ExtractMetadata(ctx context.Context, ocrText strin
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("[ai] response status=%d bytes=%d duration=%s",
+		resp.StatusCode, len(respBody), time.Since(requestStart).Round(time.Millisecond))
 
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("opencode go error (%d): %s", resp.StatusCode, string(respBody))
@@ -142,7 +153,16 @@ func (e *OpenCodeGoExtractor) ExtractMetadata(ctx context.Context, ocrText strin
 		return nil, fmt.Errorf("opencode go returned no choices")
 	}
 
-	return models.ParseExtractedMetadata(chatResp.Choices[0].Message.Content)
+	content := chatResp.Choices[0].Message.Content
+	metadata, err := models.ParseExtractedMetadata(content)
+	if err != nil {
+		log.Printf("[ai] parse failed content_chars=%d: %v", len(content), err)
+		return nil, err
+	}
+	log.Printf("[ai] extraction complete confidence=%.2f title=%q type=%q tags=%d content_chars=%d",
+		metadata.Confidence, truncateForLog(metadata.Title, 80), truncateForLog(metadata.DocumentType, 40),
+		len(metadata.Tags), len(content))
+	return metadata, nil
 }
 
 func (e *OpenCodeGoExtractor) PromptVersion() string {
@@ -154,6 +174,14 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max]
+}
+
+func truncateForLog(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }
 
 func NewExtractor(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration) Extractor {
