@@ -114,23 +114,53 @@ export async function chatWithDocument(documentId: string, messages: ChatMessage
   return data.message
 }
 
+export class AuthRequiredError extends Error {
+  constructor() {
+    super('Authentication required')
+    this.name = 'AuthRequiredError'
+  }
+}
+
+export function hasDevCredentials() {
+  const email = import.meta.env.VITE_DEV_USER_EMAIL
+  const password = import.meta.env.VITE_DEV_USER_PASSWORD
+  return Boolean(email && password)
+}
+
+export async function loginWithPassword(email: string, password: string) {
+  await pb.collection('users').authWithPassword(email, password)
+}
+
+export function logout() {
+  pb.authStore.clear()
+}
+
+export function getUserDisplayName() {
+  const record = pb.authStore.record
+  if (!record) {
+    return ''
+  }
+
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  const email = typeof record.email === 'string' ? record.email.trim() : ''
+  return name || email
+}
+
 export async function ensureAuth() {
   if (pb.authStore.isValid) {
     return
   }
 
-  const email = import.meta.env.VITE_DEV_USER_EMAIL ?? 'dev@paperless.local'
-  const password = import.meta.env.VITE_DEV_USER_PASSWORD ?? 'devpassword123'
+  const email = import.meta.env.VITE_DEV_USER_EMAIL
+  const password = import.meta.env.VITE_DEV_USER_PASSWORD
+
+  if (!email || !password) {
+    throw new AuthRequiredError()
+  }
 
   try {
     await pb.collection('users').authWithPassword(email, password)
   } catch {
-    await pb.collection('users').create({
-      email,
-      password,
-      passwordConfirm: password,
-      name: 'Developer',
-    })
-    await pb.collection('users').authWithPassword(email, password)
+    throw new AuthRequiredError()
   }
 }
