@@ -20,6 +20,7 @@ Return ONLY valid JSON with these fields:
 - purpose (string)
 - document_date (string, YYYY-MM-DD or empty)
 - document_type (string)
+- correspondent (string, primary sender or issuer)
 - tags (array of strings)
 - people_or_organizations (array of strings)
 - summary (string, 1-3 sentences)
@@ -35,6 +36,7 @@ Also include these fields translated into %s:
 - purpose_translated (string)
 - summary_translated (string)
 - document_type_translated (string)
+- correspondent_translated (string)
 - tags_translated (array of strings) — one translation per tag, same order as tags`, resultLanguage)
 	}
 
