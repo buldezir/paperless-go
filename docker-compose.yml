@@ -1,7 +1,8 @@
 services:
-  backend:
+  app:
     build:
-      context: ./backend
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8090:8090"
     environment:
@@ -9,18 +10,8 @@ services:
       OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:-}
       OPENCODE_GO_MODEL: ${OPENCODE_GO_MODEL:-deepseek-v4-flash}
     volumes:
-      - backend_data:/app/pb_data
+      - app_data:/app/pb_data
     command: ["serve", "--http=0.0.0.0:8090"]
 
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "5173:5173"
-    environment:
-      VITE_POCKETBASE_URL: http://127.0.0.1:8090
-    depends_on:
-      - backend
-
 volumes:
-  backend_data:
+  app_data:

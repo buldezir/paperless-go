@@ -93,7 +93,7 @@ OCR_API_KEY=your-google-api-key
 # Backend tests
 cd backend && go test ./...
 
-# Frontend build
+# Frontend build (outputs to ../public for PocketBase to serve)
 cd frontend && npm run build
 
 # Create a new migration

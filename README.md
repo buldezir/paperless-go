@@ -36,7 +36,14 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`.
+Open `http://127.0.0.1:5173` for local dev, or build the frontend and serve it from PocketBase:
+
+```bash
+cd frontend && npm run build
+cd ../backend && go run . serve --http=127.0.0.1:8090
+```
+
+Then open `http://127.0.0.1:8090`.
 
 ## Environment variables
 
