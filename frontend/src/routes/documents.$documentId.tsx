@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import { ensureAuth, fileUrl, pb, reprocessDocument } from '../lib/pocketbase'
+import { ensureAuth, fileUrl, pb, reprocessDocument, type ReprocessMode } from '../lib/pocketbase'
 import type { DocumentRecord, ProcessingJobRecord } from '../lib/pocketbase'
 
 export function DocumentDetailPage() {
@@ -69,8 +69,13 @@ export function DocumentDetailPage() {
   const canReprocess =
     document?.processing_status !== 'processing' && document?.processing_status !== 'pending'
 
-  async function onReprocess() {
+  const canReprocessExtraction = canReprocess && Boolean(document?.ocr_text?.trim())
+
+  async function onReprocess(mode: ReprocessMode) {
     if (!document || !canReprocess) {
+      return
+    }
+    if (mode === 'extraction' && !canReprocessExtraction) {
       return
     }
 
@@ -79,7 +84,7 @@ export function DocumentDetailPage() {
       setMessage('')
       setError('')
 
-      await reprocessDocument(document.id)
+      await reprocessDocument(document.id, mode)
 
       const doc = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
         expand: 'tags,document_type',
@@ -91,7 +96,11 @@ export function DocumentDetailPage() {
 
       setDocument(doc)
       setJob(jobs.items[0] ?? null)
-      setMessage('Document queued for reprocessing.')
+      setMessage(
+        mode === 'full'
+          ? 'Document queued for full reprocessing (with OCR).'
+          : 'Document queued for extraction reprocessing.',
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reprocess document')
     } finally {
@@ -196,14 +205,25 @@ export function DocumentDetailPage() {
           <p className="text-sm text-gray-500">Status: {document.processing_status}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={onReprocess}
+          <select
+            value=""
+            onChange={(event) => {
+              const mode = event.target.value as ReprocessMode
+              if (mode) {
+                void onReprocess(mode)
+              }
+            }}
             disabled={!canReprocess || reprocessing}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {reprocessing ? 'Reprocessing...' : 'Reprocess'}
-          </button>
+            <option value="" disabled>
+              {reprocessing ? 'Reprocessing...' : 'Reprocess'}
+            </option>
+            <option value="full">Reprocess full (with OCR)</option>
+            <option value="extraction" disabled={!canReprocessExtraction}>
+              Reprocess extraction
+            </option>
+          </select>
           {document.file && (
             <a
               className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
@@ -224,6 +244,10 @@ export function DocumentDetailPage() {
             <div>
               <dt className="text-xs text-gray-400">Status</dt>
               <dd className="text-sm text-gray-700">{job.status}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-gray-400">Job type</dt>
+              <dd className="text-sm text-gray-700">{job.job_type || 'full'}</dd>
             </div>
             <div>
               <dt className="text-xs text-gray-400">OCR provider</dt>

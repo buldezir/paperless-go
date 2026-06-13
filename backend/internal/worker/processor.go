@@ -71,9 +71,11 @@ func processNextJob(app core.App, cfg config.Config, ocrProvider ocr.Provider, a
 func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider ocr.Provider, aiExtractor ai.Extractor) error {
 	job.Set("status", models.JobStatusRunning)
 	job.Set("started_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
-	job.Set("ocr_provider", ocrProvider.Name())
 	job.Set("ai_provider", aiExtractor.Name())
 	job.Set("prompt_version", cfg.ExtractionPromptVer)
+	if job.GetString("job_type") != models.JobTypeExtraction {
+		job.Set("ocr_provider", ocrProvider.Name())
+	}
 	if err := app.Save(job); err != nil {
 		return err
 	}
@@ -91,9 +93,20 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.OpenCodeGoTimeout+30*time.Second)
 	defer cancel()
 
-	ocrText, mimeType, err := extractOCRText(ctx, app, document, ocrProvider)
-	if err != nil {
-		return failJob(app, job, document, fmt.Errorf("ocr: %w", err))
+	var ocrText string
+	var mimeType string
+	switch job.GetString("job_type") {
+	case models.JobTypeExtraction:
+		ocrText = strings.TrimSpace(document.GetString("ocr_text"))
+		if ocrText == "" {
+			return failJob(app, job, document, fmt.Errorf("extraction reprocess requires existing ocr_text"))
+		}
+	default:
+		var err error
+		ocrText, mimeType, err = extractOCRText(ctx, app, document, ocrProvider)
+		if err != nil {
+			return failJob(app, job, document, fmt.Errorf("ocr: %w", err))
+		}
 	}
 
 	metadata, err := aiExtractor.ExtractMetadata(ctx, ocrText)
@@ -112,7 +125,9 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		return failJob(app, job, document, fmt.Errorf("ai extraction: %w", err))
 	}
 
-	document.Set("ocr_text", ocrText)
+	if job.GetString("job_type") != models.JobTypeExtraction {
+		document.Set("ocr_text", ocrText)
+	}
 	applyExtractedMetadata(document, metadata, cfg.OCRResultLanguage)
 	if err := applyDocumentType(app, document, metadata, cfg.OCRResultLanguage); err != nil {
 		return failJob(app, job, document, fmt.Errorf("document type: %w", err))

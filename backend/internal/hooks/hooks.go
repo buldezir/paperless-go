@@ -28,6 +28,9 @@ func Register(app core.App) {
 		if record.Get("retry_count") == nil {
 			record.Set("retry_count", 0)
 		}
+		if record.GetString("job_type") == "" {
+			record.Set("job_type", models.JobTypeFull)
+		}
 		return e.Next()
 	})
 
@@ -63,6 +66,7 @@ func createProcessingJob(app core.App, documentID string) (*core.Record, error) 
 	job := core.NewRecord(jobsCollection)
 	job.Set("document", documentID)
 	job.Set("status", models.JobStatusPending)
+	job.Set("job_type", models.JobTypeFull)
 
 	if err := app.Save(job); err != nil {
 		return nil, err

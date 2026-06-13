@@ -46,6 +46,7 @@ export type ProcessingJobRecord = {
   id: string
   document: string
   status: string
+  job_type: 'full' | 'extraction'
   retry_count: number
   ocr_provider: string
   ai_provider: string
@@ -57,11 +58,13 @@ export type ProcessingJobRecord = {
   updated: string
 }
 
+export type ReprocessMode = 'full' | 'extraction'
+
 export function fileUrl(record: DocumentRecord, filename?: string) {
   return pb.files.getURL(record, filename ?? record.file)
 }
 
-export async function reprocessDocument(documentId: string) {
+export async function reprocessDocument(documentId: string, mode: ReprocessMode = 'full') {
   await ensureAuth()
   await pb.collection('documents').update(documentId, {
     processing_status: 'pending',
@@ -69,6 +72,7 @@ export async function reprocessDocument(documentId: string) {
   return pb.collection('processing_jobs').create({
     document: documentId,
     status: 'pending',
+    job_type: mode,
   })
 }
 
