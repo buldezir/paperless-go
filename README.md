@@ -19,11 +19,14 @@ docs/       Development guide
 
 ## Quick start
 
+```bash
+cp .env.example .env
+```
+
 ### Backend
 
 ```bash
 cd backend
-cp .env.example .env
 go run . serve --http=127.0.0.1:8090
 ```
 
@@ -31,7 +34,6 @@ go run . serve --http=127.0.0.1:8090
 
 ```bash
 cd frontend
-cp .env.example .env
 npm install
 npm run dev
 ```

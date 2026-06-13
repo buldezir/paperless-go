@@ -8,11 +8,14 @@
 
 ## Running locally
 
+```bash
+cp .env.example .env
+```
+
 ### 1. Start PocketBase backend
 
 ```bash
 cd backend
-cp .env.example .env
 go run . serve --http=127.0.0.1:8090
 ```
 
@@ -26,7 +29,6 @@ On first run, migrations create:
 
 ```bash
 cd frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
@@ -35,7 +37,9 @@ The frontend auto-registers and logs in a dev user on first load.
 
 ## Environment variables
 
-### Backend (`backend/.env`)
+All variables live in `.env` at the project root (see `.env.example`).
+
+### Backend
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -49,7 +53,7 @@ The frontend auto-registers and logs in a dev user on first load.
 | `WORKER_MAX_RETRIES` | `3` | Max AI retry attempts per job |
 | `EXTRACTION_PROMPT_VERSION` | `v1` | Stored on each processing job |
 
-### Frontend (`frontend/.env`)
+### Frontend
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -69,7 +73,7 @@ The frontend auto-registers and logs in a dev user on first load.
 ## OpenCode Go setup
 
 1. Subscribe and create an API key at [OpenCode Go](https://opencode.ai/docs/go/)
-2. Set `OPENCODE_GO_API_KEY` in `backend/.env`
+2. Set `OPENCODE_GO_API_KEY` in `.env`
 3. Optionally change `OPENCODE_GO_MODEL` (for example `deepseek-v4-flash` or `glm-5`)
 
 Without an API key, the backend uses a mock AI extractor for local development.

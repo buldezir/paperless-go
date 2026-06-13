@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/joho/godotenv"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -19,6 +20,8 @@ import (
 )
 
 func main() {
+	loadEnvFile()
+
 	app := pocketbase.New()
 
 	var publicDir string
@@ -57,6 +60,18 @@ func main() {
 
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func loadEnvFile() {
+	for _, path := range []string{".env", "../.env"} {
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		if err := godotenv.Load(path); err != nil {
+			log.Printf("warning: failed to load %s: %v", path, err)
+		}
+		return
 	}
 }
 

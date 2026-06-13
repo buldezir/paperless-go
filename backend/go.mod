@@ -2,7 +2,10 @@ module paperless-go/backend
 
 go 1.26.3
 
-require github.com/pocketbase/pocketbase v0.39.3
+require (
+	github.com/joho/godotenv v1.5.1
+	github.com/pocketbase/pocketbase v0.39.3
+)
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
