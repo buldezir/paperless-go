@@ -24,7 +24,6 @@ export function UploadPage() {
       formData.append('file', file)
       formData.append('user', pb.authStore.record?.id ?? '')
       formData.append('processing_status', 'pending')
-      formData.append('metadata_source', 'ai')
 
       const record = await pb.collection('documents').create(formData)
       navigate({ to: '/documents/$documentId', params: { documentId: record.id } })

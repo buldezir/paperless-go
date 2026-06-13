@@ -23,7 +23,6 @@ const (
 	DocStatusFailed      = "failed"
 	DocStatusNeedsReview = "needs_review"
 
-	MetadataSourceAI   = "ai"
 	MetadataSourceUser = "user"
 )
 

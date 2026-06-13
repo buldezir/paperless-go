@@ -8,5 +8,6 @@ import (
 
 type Extractor interface {
 	Name() string
+	Model() string
 	ExtractMetadata(ctx context.Context, ocrText string) (*models.ExtractedMetadata, error)
 }

@@ -22,7 +22,7 @@ export type DocumentRecord = {
   summary: string
   summary_original: string
   processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'needs_review'
-  metadata_source: 'ai' | 'user'
+  metadata_source: string
   confidence: number
   people_or_organizations: string[]
   tags: string[]
@@ -59,7 +59,6 @@ export async function reprocessDocument(documentId: string) {
   await ensureAuth()
   await pb.collection('documents').update(documentId, {
     processing_status: 'pending',
-    metadata_source: 'ai',
   })
   return pb.collection('processing_jobs').create({
     document: documentId,

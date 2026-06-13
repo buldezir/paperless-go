@@ -141,7 +141,6 @@ func handlePostDocument(e *core.RequestEvent) error {
 	record.Set("user", e.Auth.Id)
 	record.Set("file", files[0])
 	record.Set("processing_status", models.DocStatusPending)
-	record.Set("metadata_source", models.MetadataSourceAI)
 
 	form := e.Request.MultipartForm
 	if form != nil {

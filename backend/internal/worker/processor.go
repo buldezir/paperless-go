@@ -117,7 +117,7 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	document.Set("document_type", metadata.DocumentType)
 	document.Set("confidence", metadata.Confidence)
 	document.Set("people_or_organizations", metadata.PeopleOrOrganizations)
-	document.Set("metadata_source", models.MetadataSourceAI)
+	document.Set("metadata_source", aiExtractor.Model())
 
 	if metadata.DocumentDate != "" {
 		document.Set("document_date", metadata.DocumentDate)

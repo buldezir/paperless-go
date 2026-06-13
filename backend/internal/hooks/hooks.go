@@ -12,10 +12,6 @@ func Register(app core.App) {
 		if record.GetString("processing_status") == "" {
 			record.Set("processing_status", models.DocStatusPending)
 		}
-		if record.GetString("metadata_source") == "" {
-			record.Set("metadata_source", models.MetadataSourceAI)
-		}
-
 		if err := e.Next(); err != nil {
 			return err
 		}

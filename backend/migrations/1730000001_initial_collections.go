@@ -62,10 +62,7 @@ func init() {
 				Name:   "processing_status",
 				Values: []string{"pending", "processing", "completed", "failed", "needs_review"},
 			},
-			&core.SelectField{
-				Name:   "metadata_source",
-				Values: []string{"ai", "user"},
-			},
+			&core.TextField{Name: "metadata_source", Max: 200},
 			&core.NumberField{Name: "confidence", Min: types.Pointer(0.0), Max: types.Pointer(1.0)},
 			&core.JSONField{Name: "people_or_organizations"},
 			&core.RelationField{

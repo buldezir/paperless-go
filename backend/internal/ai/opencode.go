@@ -69,6 +69,10 @@ func (e *OpenCodeGoExtractor) Name() string {
 	return "opencode_go"
 }
 
+func (e *OpenCodeGoExtractor) Model() string {
+	return e.model
+}
+
 func (e *OpenCodeGoExtractor) ExtractMetadata(ctx context.Context, ocrText string) (*models.ExtractedMetadata, error) {
 	if e.apiKey == "" {
 		return nil, fmt.Errorf("OPENCODE_GO_API_KEY is not configured")
