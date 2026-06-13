@@ -1,0 +1,253 @@
+package ngxapi
+
+import (
+	"errors"
+	"mime/multipart"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/core"
+	"paperless-go/backend/internal/models"
+)
+
+func handleListDocuments(e *core.RequestEvent) error {
+	page, pageSize := paginationParams(e)
+	authID := e.Auth.Id
+
+	filter := ownerFilter(authID)
+	params := ownerParams(authID)
+
+	query := strings.TrimSpace(e.Request.URL.Query().Get("query"))
+	if query != "" {
+		filter += " && (title ~ {:q} || ocr_text ~ {:q})"
+		params["q"] = query
+	}
+
+	total, err := e.App.CountRecords("documents", dbx.NewExp(filter, params))
+	if err != nil {
+		return internalError(e, err)
+	}
+
+	sort := documentSortField(e.Request.URL.Query().Get("ordering"))
+	offset := (page - 1) * pageSize
+
+	records, err := e.App.FindRecordsByFilter(
+		"documents",
+		filter,
+		sort,
+		pageSize,
+		offset,
+		params,
+	)
+	if err != nil {
+		return internalError(e, err)
+	}
+
+	results := make([]any, 0, len(records))
+	for _, record := range records {
+		results = append(results, mapDocument(e.App, record))
+	}
+
+	return paginatedList(e, total, page, pageSize, results)
+}
+
+func handleGetDocument(e *core.RequestEvent) error {
+	record, err := findOwnedDocument(e.App, e.Auth.Id, e.Request.PathValue("id"))
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+	return writeJSON(e, http.StatusOK, mapDocument(e.App, record))
+}
+
+func handlePatchDocument(e *core.RequestEvent) error {
+	record, err := findOwnedDocument(e.App, e.Auth.Id, e.Request.PathValue("id"))
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+
+	var body map[string]any
+	if err := e.BindBody(&body); err != nil {
+		return badRequest(e, "Invalid request body.")
+	}
+
+	if v, ok := body["title"].(string); ok {
+		record.Set("title", v)
+	}
+	if v, ok := body["content"].(string); ok {
+		record.Set("ocr_text", v)
+	}
+	if v, ok := body["created"].(string); ok {
+		record.Set("document_date", v)
+	}
+	if v, ok := body["document_type"]; ok {
+		setRelationField(e.App, record, "ngx_document_type", v)
+	}
+	if v, ok := body["correspondent"]; ok {
+		setRelationField(e.App, record, "correspondent", v)
+	}
+	if v, ok := body["tags"].([]any); ok {
+		raw := make([]string, 0, len(v))
+		for _, item := range v {
+			switch tagID := item.(type) {
+			case float64:
+				raw = append(raw, strconv.Itoa(int(tagID)))
+			case int:
+				raw = append(raw, strconv.Itoa(tagID))
+			case string:
+				raw = append(raw, tagID)
+			}
+		}
+		record.Set("tags", expandTagIDs(e.App, raw))
+	}
+
+	record.Set("metadata_source", models.MetadataSourceUser)
+	if err := e.App.Save(record); err != nil {
+		return badRequest(e, err.Error())
+	}
+
+	return writeJSON(e, http.StatusOK, mapDocument(e.App, record))
+}
+
+func handleDeleteDocument(e *core.RequestEvent) error {
+	record, err := findOwnedDocument(e.App, e.Auth.Id, e.Request.PathValue("id"))
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+	if err := e.App.Delete(record); err != nil {
+		return internalError(e, err)
+	}
+	e.Response.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func handlePostDocument(e *core.RequestEvent) error {
+	files, err := e.FindUploadedFiles("document")
+	if err != nil {
+		return badRequest(e, "Missing document file.")
+	}
+
+	if err := e.Request.ParseMultipartForm(32 << 20); err != nil {
+		return badRequest(e, "Invalid multipart form.")
+	}
+
+	collection, err := e.App.FindCollectionByNameOrId("documents")
+	if err != nil {
+		return internalError(e, err)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("user", e.Auth.Id)
+	record.Set("file", files[0])
+	record.Set("processing_status", models.DocStatusPending)
+	record.Set("metadata_source", models.MetadataSourceAI)
+
+	form := e.Request.MultipartForm
+	if form != nil {
+		if title := firstFormValue(form, "title"); title != "" {
+			record.Set("title", title)
+		}
+		if created := firstFormValue(form, "created"); created != "" {
+			record.Set("document_date", createdDateOnly(created))
+		}
+		if correspondent := firstFormValue(form, "correspondent"); correspondent != "" {
+			if pbID := resolvePBRelationID(e.App, "correspondents", correspondent); pbID != "" {
+				record.Set("correspondent", pbID)
+			}
+		}
+		if docType := firstFormValue(form, "document_type"); docType != "" {
+			if pbID := resolvePBRelationID(e.App, "document_types", docType); pbID != "" {
+				record.Set("ngx_document_type", pbID)
+			}
+		}
+		if tagIDs := parseTagIDs(form.Value); len(tagIDs) > 0 {
+			record.Set("tags", expandTagIDs(e.App, tagIDs))
+		}
+	}
+
+	if err := e.App.Save(record); err != nil {
+		return badRequest(e, err.Error())
+	}
+
+	taskID, err := findTaskIDForDocument(e.App, record.Id)
+	if err != nil {
+		return internalError(e, err)
+	}
+
+	return writeJSON(e, http.StatusOK, taskID)
+}
+
+func handleDownloadDocument(e *core.RequestEvent) error {
+	record, err := findOwnedDocument(e.App, e.Auth.Id, e.Request.PathValue("id"))
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+
+	fileName := record.GetString("file")
+	if fileName == "" {
+		return notFound(e, "Document has no file.")
+	}
+
+	fsys, err := e.App.NewFilesystem()
+	if err != nil {
+		return internalError(e, err)
+	}
+	defer fsys.Close()
+
+	fileKey := record.BaseFilesPath() + "/" + fileName
+	return fsys.Serve(e.Response, e.Request, fileKey, fileName)
+}
+
+func findTaskIDForDocument(app core.App, documentID string) (string, error) {
+	jobs, err := app.FindRecordsByFilter(
+		"processing_jobs",
+		"document = {:docId}",
+		"-created",
+		1,
+		0,
+		map[string]any{"docId": documentID},
+	)
+	if err != nil {
+		return "", err
+	}
+	if len(jobs) == 0 {
+		return "", errors.New("processing job not found")
+	}
+	taskID := jobs[0].GetString("task_id")
+	if taskID == "" {
+		return jobs[0].Id, nil
+	}
+	return taskID, nil
+}
+
+func setRelationField(app core.App, record *core.Record, field string, value any) {
+	if value == nil {
+		record.Set(field, "")
+		return
+	}
+	pbID := resolvePBRelationID(app, collectionForRelationField(field), value)
+	record.Set(field, pbID)
+}
+
+func collectionForRelationField(field string) string {
+	switch field {
+	case "correspondent":
+		return "correspondents"
+	case "ngx_document_type":
+		return "document_types"
+	default:
+		return ""
+	}
+}
+
+func firstFormValue(form *multipart.Form, key string) string {
+	if form == nil {
+		return ""
+	}
+	values := form.Value[key]
+	if len(values) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(values[0])
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/osutils"
 	"paperless-go/backend/internal/hooks"
+	"paperless-go/backend/internal/ngxapi"
 	"paperless-go/backend/internal/worker"
 
 	_ "paperless-go/backend/migrations"
@@ -45,6 +46,7 @@ func main() {
 	})
 
 	hooks.Register(app)
+	ngxapi.Register(app)
 	worker.Start(app)
 
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{

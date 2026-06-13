@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase/core"
 	"paperless-go/backend/internal/models"
 )
@@ -28,6 +29,7 @@ func Register(app core.App) {
 		job.Set("document", record.Id)
 		job.Set("status", models.JobStatusPending)
 		job.Set("retry_count", 0)
+		job.Set("task_id", uuid.New().String())
 
 		return e.App.Save(job)
 	})

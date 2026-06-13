@@ -1,0 +1,166 @@
+package ngxapi
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/hook"
+	"github.com/pocketbase/pocketbase/tools/router"
+)
+
+// Register mounts paperless-ngx compatible REST endpoints on the PocketBase router.
+func Register(app core.App) {
+	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
+		Priority: 40,
+		Func: func(e *core.ServeEvent) error {
+			// paperless-ngx clients send "Authorization: Token <jwt>"; PocketBase only strips "Bearer ".
+			e.Router.Bind(&hook.Handler[*core.RequestEvent]{
+				Priority: -1030,
+				Func:     normalizePaperlessAuthHeader,
+			})
+			return e.Next()
+		},
+	})
+
+	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
+		Priority: 50,
+		Func: func(e *core.ServeEvent) error {
+			g := e.Router.Group("/api")
+
+			g.GET("/schema/", handleSchema)
+			g.GET("/schema", handleSchema)
+
+			g.GET("/profile/", bindAuth(handleProfile))
+			g.PATCH("/profile/", bindAuth(handleProfile))
+			g.GET("/profile", bindAuth(handleProfile))
+
+			g.GET("/ui_settings/", bindAuth(handleUiSettings))
+			g.POST("/ui_settings/", bindAuth(handleUiSettings))
+			g.GET("/ui_settings", bindAuth(handleUiSettings))
+			g.POST("/ui_settings", bindAuth(handleUiSettings))
+
+			g.GET("/config/", bindAuth(handleAppConfig))
+			g.GET("/config", bindAuth(handleAppConfig))
+			g.GET("/remote_version/", bindAuth(handleRemoteVersion))
+			g.GET("/remote_version", bindAuth(handleRemoteVersion))
+
+			registerEmptyListRoutes(g, "/custom_fields")
+			registerEmptyListRoutes(g, "/saved_views")
+			registerEmptyListRoutes(g, "/storage_paths")
+			registerEmptyListRoutes(g, "/users")
+			registerEmptyListRoutes(g, "/groups")
+
+			g.GET("/", handleAPIRoot)
+
+			g.POST("/token/", handleToken)
+			g.POST("/token", handleToken)
+			g.GET("/token/", handleTokenMethodNotAllowed)
+			g.GET("/token", handleTokenMethodNotAllowed)
+			g.HEAD("/token/", handleTokenMethodNotAllowed)
+			g.HEAD("/token", handleTokenMethodNotAllowed)
+
+			registerDocumentRoutes(g)
+			registerTagRoutes(g)
+			registerCorrespondentRoutes(g)
+			registerDocumentTypeRoutes(g)
+
+			g.GET("/tasks/", bindAuth(handleListTasks))
+			g.GET("/tasks", bindAuth(handleListTasks))
+
+			return e.Next()
+		},
+	})
+}
+
+func registerDocumentRoutes(g *router.RouterGroup[*core.RequestEvent]) {
+	list := []struct {
+		list, item, itemDownload, postDocument string
+	}{
+		{"/documents/", "/documents/{id}/", "/documents/{id}/download/", "/documents/post_document/"},
+		{"/documents", "/documents/{id}", "/documents/{id}/download", "/documents/post_document"},
+	}
+	for _, r := range list {
+		g.GET(r.list, bindAuth(handleListDocuments))
+		g.GET(r.item, bindAuth(handleGetDocument))
+		g.PATCH(r.item, bindAuth(handlePatchDocument))
+		g.DELETE(r.item, bindAuth(handleDeleteDocument))
+		g.GET(r.itemDownload, bindAuth(handleDownloadDocument))
+		g.POST(r.postDocument, bindAuth(handlePostDocument))
+	}
+}
+
+func registerTagRoutes(g *router.RouterGroup[*core.RequestEvent]) {
+	for _, base := range []string{"/tags/", "/tags"} {
+		g.GET(base, bindAuth(handleListTags))
+		g.POST(base, bindAuth(handleCreateTag))
+		item := itemPath(base, "{id}")
+		g.GET(item, bindAuth(handleGetTag))
+		g.PATCH(item, bindAuth(handlePatchTag))
+		g.DELETE(item, bindAuth(handleDeleteTag))
+	}
+}
+
+func registerCorrespondentRoutes(g *router.RouterGroup[*core.RequestEvent]) {
+	for _, base := range []string{"/correspondents/", "/correspondents"} {
+		g.GET(base, bindAuth(handleListCorrespondents))
+		g.POST(base, bindAuth(handleCreateCorrespondent))
+		item := itemPath(base, "{id}")
+		g.GET(item, bindAuth(handleGetCorrespondent))
+		g.PATCH(item, bindAuth(handlePatchCorrespondent))
+		g.DELETE(item, bindAuth(handleDeleteCorrespondent))
+	}
+}
+
+func registerDocumentTypeRoutes(g *router.RouterGroup[*core.RequestEvent]) {
+	for _, base := range []string{"/document_types/", "/document_types"} {
+		g.GET(base, bindAuth(handleListDocumentTypes))
+		g.POST(base, bindAuth(handleCreateDocumentType))
+		item := itemPath(base, "{id}")
+		g.GET(item, bindAuth(handleGetDocumentType))
+		g.PATCH(item, bindAuth(handlePatchDocumentType))
+		g.DELETE(item, bindAuth(handleDeleteDocumentType))
+	}
+}
+
+func registerEmptyListRoutes(g *router.RouterGroup[*core.RequestEvent], base string) {
+	withSlash := base + "/"
+	withoutSlash := base
+	for _, path := range []string{withSlash, withoutSlash} {
+		g.GET(path, bindAuth(handleEmptyList))
+	}
+}
+
+func itemPath(base, segment string) string {
+	if strings.HasSuffix(base, "/") {
+		return base + segment + "/"
+	}
+	return base + "/" + segment
+}
+
+func bindAuth(handler func(*core.RequestEvent) error) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if err := checkAPIVersion(e); err != nil {
+			return err
+		}
+		if err := requireAuth(e); err != nil {
+			return err
+		}
+		return handler(e)
+	}
+}
+
+func handleAPIRoot(e *core.RequestEvent) error {
+	if err := checkAPIVersion(e); err != nil {
+		return err
+	}
+	return e.Redirect(http.StatusFound, "/api/schema/")
+}
+
+func normalizePaperlessAuthHeader(e *core.RequestEvent) error {
+	header := e.Request.Header.Get("Authorization")
+	if len(header) > 6 && strings.EqualFold(header[:6], "Token ") {
+		e.Request.Header.Set("Authorization", strings.TrimSpace(header[6:]))
+	}
+	return e.Next()
+}
