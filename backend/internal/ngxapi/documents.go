@@ -82,7 +82,7 @@ func handlePatchDocument(e *core.RequestEvent) error {
 		record.Set("document_date", v)
 	}
 	if v, ok := body["document_type"]; ok {
-		setRelationField(e.App, record, "ngx_document_type", v)
+		setRelationField(e.App, record, "document_type", v)
 	}
 	if v, ok := body["correspondent"]; ok {
 		setRelationField(e.App, record, "correspondent", v)
@@ -157,7 +157,7 @@ func handlePostDocument(e *core.RequestEvent) error {
 		}
 		if docType := firstFormValue(form, "document_type"); docType != "" {
 			if pbID := resolvePBRelationID(e.App, "document_types", docType); pbID != "" {
-				record.Set("ngx_document_type", pbID)
+				record.Set("document_type", pbID)
 			}
 		}
 		if tagIDs := parseTagIDs(form.Value); len(tagIDs) > 0 {
@@ -233,7 +233,7 @@ func collectionForRelationField(field string) string {
 	switch field {
 	case "correspondent":
 		return "correspondents"
-	case "ngx_document_type":
+	case "document_type":
 		return "document_types"
 	default:
 		return ""

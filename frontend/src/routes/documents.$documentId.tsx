@@ -8,6 +8,7 @@ export function DocumentDetailPage() {
   const [document, setDocument] = useState<DocumentRecord | null>(null)
   const [job, setJob] = useState<ProcessingJobRecord | null>(null)
   const [tagInput, setTagInput] = useState('')
+  const [documentTypeInput, setDocumentTypeInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
@@ -23,7 +24,7 @@ export function DocumentDetailPage() {
         await ensureAuth()
 
         const doc = await pb.collection('documents').getOne<DocumentRecord>(documentId, {
-          expand: 'tags',
+          expand: 'tags,document_type',
         })
 
         const jobs = await pb.collection('processing_jobs').getList<ProcessingJobRecord>(1, 1, {
@@ -35,6 +36,7 @@ export function DocumentDetailPage() {
           setDocument(doc)
           setJob(jobs.items[0] ?? null)
           setTagInput((doc.expand?.tags ?? []).map((tag) => tag.name).join(', '))
+          setDocumentTypeInput(doc.expand?.document_type?.name ?? '')
           setError('')
         }
       } catch (err) {
@@ -80,7 +82,7 @@ export function DocumentDetailPage() {
       await reprocessDocument(document.id)
 
       const doc = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
-        expand: 'tags',
+        expand: 'tags,document_type',
       })
       const jobs = await pb.collection('processing_jobs').getList<ProcessingJobRecord>(1, 1, {
         filter: `document = "${document.id}"`,
@@ -126,11 +128,25 @@ export function DocumentDetailPage() {
         }
       }
 
+      let documentTypeId = ''
+      const documentTypeName = documentTypeInput.trim()
+      if (documentTypeName) {
+        const existing = await pb.collection('document_types').getList(1, 1, {
+          filter: `name = "${documentTypeName.replace(/"/g, '\\"')}"`,
+        })
+        if (existing.items.length > 0) {
+          documentTypeId = existing.items[0].id
+        } else {
+          const created = await pb.collection('document_types').create({ name: documentTypeName })
+          documentTypeId = created.id
+        }
+      }
+
       const updated = await pb.collection('documents').update<DocumentRecord>(document.id, {
         title: document.title,
         purpose: document.purpose,
         document_date: document.document_date || null,
-        document_type: document.document_type,
+        document_type: documentTypeId || null,
         summary: document.summary,
         tags: tagIds,
         metadata_source: 'user',
@@ -140,6 +156,11 @@ export function DocumentDetailPage() {
 
       setDocument(updated)
       setMessage('Metadata saved.')
+      const refreshed = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
+        expand: 'tags,document_type',
+      })
+      setDocument(refreshed)
+      setDocumentTypeInput(refreshed.expand?.document_type?.name ?? '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save metadata')
     } finally {
@@ -258,8 +279,8 @@ export function DocumentDetailPage() {
           Document type
           <input
             className={inputClass}
-            value={document.document_type ?? ''}
-            onChange={(event) => setDocument({ ...document, document_type: event.target.value })}
+            value={documentTypeInput}
+            onChange={(event) => setDocumentTypeInput(event.target.value)}
           />
         </label>
 

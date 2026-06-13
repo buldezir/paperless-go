@@ -20,7 +20,7 @@ export function IndexPage() {
         await ensureAuth()
         const result = await pb.collection('documents').getList<DocumentRecord>(1, 50, {
           sort: '-created',
-          expand: 'tags',
+          expand: 'tags,document_type',
         })
         if (active) {
           setDocuments(result.items)
@@ -59,7 +59,7 @@ export function IndexPage() {
       const haystack = [
         doc.title,
         doc.purpose,
-        doc.document_type,
+        doc.expand?.document_type?.name,
         doc.summary,
         ...(doc.expand?.tags?.map((tag) => tag.name) ?? []),
       ]

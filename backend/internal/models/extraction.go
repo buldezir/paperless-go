@@ -32,7 +32,8 @@ type ExtractedMetadata struct {
 	Purpose               string   `json:"purpose"`
 	PurposeTranslated     string   `json:"purpose_translated"`
 	DocumentDate          string   `json:"document_date"`
-	DocumentType          string   `json:"document_type"`
+	DocumentType           string   `json:"document_type"`
+	DocumentTypeTranslated string   `json:"document_type_translated"`
 	Tags                  []string `json:"tags"`
 	TagsTranslated        []string `json:"tags_translated"`
 	PeopleOrOrganizations []string `json:"people_or_organizations"`

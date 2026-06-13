@@ -59,6 +59,31 @@ func TestApplyExtractedMetadataWithTranslation(t *testing.T) {
 	}
 }
 
+func TestDocumentTypeNamesWithoutTranslation(t *testing.T) {
+	metadata := &models.ExtractedMetadata{DocumentType: "Rechnung"}
+	primary, ensure := documentTypeNames(metadata, "")
+	if primary != "Rechnung" {
+		t.Fatalf("expected primary Rechnung, got %q", primary)
+	}
+	if len(ensure) != 1 || ensure[0] != "Rechnung" {
+		t.Fatalf("expected [Rechnung], got %v", ensure)
+	}
+}
+
+func TestDocumentTypeNamesWithTranslation(t *testing.T) {
+	metadata := &models.ExtractedMetadata{
+		DocumentType:           "Rechnung",
+		DocumentTypeTranslated: "Invoice",
+	}
+	primary, ensure := documentTypeNames(metadata, "en")
+	if primary != "Invoice" {
+		t.Fatalf("expected primary Invoice, got %q", primary)
+	}
+	if len(ensure) != 2 {
+		t.Fatalf("expected 2 document types to ensure, got %d: %v", len(ensure), ensure)
+	}
+}
+
 func TestMergeTagNames(t *testing.T) {
 	got := mergeTagNames([]string{"Rechnung", "Büro"}, []string{"Invoice", "Office"})
 	if len(got) != 4 {

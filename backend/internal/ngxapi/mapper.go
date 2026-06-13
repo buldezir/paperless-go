@@ -36,7 +36,7 @@ func mapDocument(app core.App, record *core.Record) map[string]any {
 		"title":                 record.GetString("title"),
 		"content":               content,
 		"tags":                  tagIDs,
-		"document_type":         relationID(record, "ngx_document_type"),
+		"document_type":         relationID(record, "document_type"),
 		"correspondent":         relationID(record, "correspondent"),
 		"storage_path":          nil,
 		"created":               createdFormatted,

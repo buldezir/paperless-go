@@ -34,6 +34,7 @@ Also include these fields translated into %s:
 - title_translated (string)
 - purpose_translated (string)
 - summary_translated (string)
+- document_type_translated (string)
 - tags_translated (array of strings) — one translation per tag, same order as tags`, resultLanguage)
 	}
 

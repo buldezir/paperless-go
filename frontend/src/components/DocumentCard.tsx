@@ -43,7 +43,7 @@ export function DocumentCard({ document }: Props) {
 
       <div>
         <h3 className="font-medium text-gray-900">{document.title || 'Untitled document'}</h3>
-        <p className="text-xs text-gray-500">{document.document_type || 'Unknown type'}</p>
+        <p className="text-xs text-gray-500">{document.expand?.document_type?.name || 'Unknown type'}</p>
       </div>
 
       <p className="line-clamp-3 text-sm text-gray-600">

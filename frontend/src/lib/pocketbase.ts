@@ -4,6 +4,11 @@ const pbUrl = import.meta.env.VITE_POCKETBASE_URL ?? 'http://127.0.0.1:8090'
 
 export const pb = new PocketBase(pbUrl)
 
+export type DocumentTypeRecord = {
+  id: string
+  name: string
+}
+
 export type DocumentRecord = {
   id: string
   collectionId: string
@@ -28,6 +33,7 @@ export type DocumentRecord = {
   tags: string[]
   expand?: {
     tags?: TagRecord[]
+    document_type?: DocumentTypeRecord
   }
 }
 

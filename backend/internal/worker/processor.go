@@ -114,7 +114,9 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 
 	document.Set("ocr_text", ocrText)
 	applyExtractedMetadata(document, metadata, cfg.OCRResultLanguage)
-	document.Set("document_type", metadata.DocumentType)
+	if err := applyDocumentType(app, document, metadata, cfg.OCRResultLanguage); err != nil {
+		return failJob(app, job, document, fmt.Errorf("document type: %w", err))
+	}
 	document.Set("confidence", metadata.Confidence)
 	document.Set("people_or_organizations", metadata.PeopleOrOrganizations)
 	document.Set("metadata_source", aiExtractor.Model())
@@ -237,6 +239,108 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func documentTypeNames(metadata *models.ExtractedMetadata, resultLanguage string) (primary string, ensure []string) {
+	original := strings.TrimSpace(metadata.DocumentType)
+	if original == "" {
+		return "", nil
+	}
+	if resultLanguage == "" {
+		return original, []string{original}
+	}
+
+	translated := strings.TrimSpace(metadata.DocumentTypeTranslated)
+	primary = firstNonEmpty(translated, original)
+	return primary, mergeTagNames([]string{original}, []string{translated})
+}
+
+func applyDocumentType(app core.App, document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) error {
+	primaryName, names := documentTypeNames(metadata, resultLanguage)
+	if primaryName == "" {
+		document.Set("document_type", "")
+		return nil
+	}
+
+	typeID, err := ensureDocumentType(app, primaryName, names)
+	if err != nil {
+		return err
+	}
+	document.Set("document_type", typeID)
+	return nil
+}
+
+func ensureDocumentType(app core.App, primaryName string, names []string) (string, error) {
+	primaryName = strings.TrimSpace(primaryName)
+	if primaryName == "" {
+		return "", nil
+	}
+
+	collection, err := app.FindCollectionByNameOrId("document_types")
+	if err != nil {
+		return "", err
+	}
+
+	var primaryID string
+	for _, rawName := range names {
+		name := strings.TrimSpace(rawName)
+		if name == "" {
+			continue
+		}
+
+		id, err := findOrCreateDocumentType(app, collection, name)
+		if err != nil {
+			return "", err
+		}
+		if strings.EqualFold(name, primaryName) {
+			primaryID = id
+		}
+	}
+
+	if primaryID == "" {
+		return findOrCreateDocumentType(app, collection, primaryName)
+	}
+	return primaryID, nil
+}
+
+func findDocumentTypeID(app core.App, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", nil
+	}
+
+	existing, err := app.FindRecordsByFilter(
+		"document_types",
+		"name = {:name}",
+		"",
+		1,
+		0,
+		map[string]any{"name": name},
+	)
+	if err != nil {
+		return "", err
+	}
+	if len(existing) == 0 {
+		return "", nil
+	}
+	return existing[0].Id, nil
+}
+
+func findOrCreateDocumentType(app core.App, collection *core.Collection, name string) (string, error) {
+	id, err := findDocumentTypeID(app, name)
+	if err != nil {
+		return "", err
+	}
+	if id != "" {
+		return id, nil
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("name", name)
+	if err := app.Save(record); err != nil {
+		return "", err
+	}
+	return record.Id, nil
 }
 
 func ensureTags(app core.App, names []string) ([]string, error) {
