@@ -4,10 +4,10 @@ import { ensureAuth, getUserDisplayName, logout, pb, pbAdminUrl } from '../lib/p
 import { LoginPage } from './LoginPage'
 
 const navLinkClass =
-  'rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900'
+  'rounded-md px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-200/70 hover:text-stone-950'
 const navLinkActiveClass = 'bg-gray-900 text-white hover:bg-gray-900 hover:text-white'
 const iconButtonClass =
-  'rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 cursor-pointer'
+  'rounded-md p-1.5 text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-stone-950 cursor-pointer'
 
 function LogoutIcon() {
   return (
@@ -68,7 +68,7 @@ export function RootLayout() {
 
   if (authState === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">
+      <div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm text-stone-500">
         Loading...
       </div>
     )
@@ -79,10 +79,10 @@ export function RootLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="border-b border-gray-200 bg-white">
+    <div className="min-h-screen bg-stone-100 text-stone-900">
+      <header className="border-b border-stone-200 bg-stone-50/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold text-gray-900">
+          <Link to="/" className="flex items-center gap-2 font-semibold text-stone-950">
             <span className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-900 text-sm text-white">
               P
             </span>
@@ -114,9 +114,9 @@ export function RootLayout() {
                 Admin
               </a>
             </nav>
-            <div className="flex items-center gap-2 border-l border-gray-200 pl-4">
+            <div className="flex items-center gap-2 border-l border-stone-200 pl-4">
               {userDisplayName && (
-                <span className="max-w-40 truncate text-sm text-gray-600" title={userDisplayName}>
+                <span className="max-w-40 truncate text-sm text-stone-600" title={userDisplayName}>
                   {userDisplayName}
                 </span>
               )}

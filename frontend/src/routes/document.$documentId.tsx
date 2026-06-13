@@ -216,7 +216,7 @@ export function DocumentDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-500">Loading document...</p>
+    return <p className="text-sm text-stone-500">Loading document...</p>
   }
 
   if (!document) {
@@ -234,13 +234,13 @@ export function DocumentDetailPage() {
     <section className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link to="/" className="text-sm text-gray-500 hover:text-gray-900">
+          <Link to="/" className="text-sm text-stone-500 hover:text-stone-950">
             &larr; Back to documents
           </Link>
-          <h2 className="mt-1 text-xl font-semibold text-gray-900">
+          <h2 className="mt-1 text-xl font-semibold text-stone-950">
             {document.title || 'Untitled document'}
           </h2>
-          <p className="text-sm text-gray-500">Status: {document.processing_status}</p>
+          <p className="text-sm text-stone-500">Status: {document.processing_status}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Link
@@ -255,14 +255,14 @@ export function DocumentDetailPage() {
             className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
               document.ocr_text?.trim()
                 ? 'border-gray-900 bg-gray-900 text-white hover:bg-gray-700'
-                : 'pointer-events-none border-gray-200 bg-gray-100 text-gray-400'
+                : 'pointer-events-none border-stone-200 bg-stone-100 text-stone-400'
             }`}
           >
             Ask AI
           </Link>
           {document.file && (
             <a
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="rounded-md border border-stone-300 bg-stone-50 px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-white"
               href={fileUrl(document)}
               target="_blank"
               rel="noreferrer"
@@ -280,7 +280,7 @@ export function DocumentDetailPage() {
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors cursor-pointer ${
                 showProcessingJob
                   ? 'border-gray-900 bg-gray-900 text-white hover:bg-gray-700'
-                  : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                  : 'border-stone-300 bg-stone-50 text-stone-500 hover:bg-white hover:text-stone-700'
               }`}
             >
               <svg
@@ -302,42 +302,42 @@ export function DocumentDetailPage() {
       </div>
 
       {job && showProcessingJob && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Processing job</h3>
+        <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-stone-950">Processing job</h3>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <dt className="text-xs text-gray-400">Status</dt>
-              <dd className="text-sm text-gray-700">{job.status}</dd>
+              <dt className="text-xs text-stone-400">Status</dt>
+              <dd className="text-sm text-stone-700">{job.status}</dd>
             </div>
             <div>
-              <dt className="text-xs text-gray-400">Job type</dt>
-              <dd className="text-sm text-gray-700">{job.job_type || 'full'}</dd>
+              <dt className="text-xs text-stone-400">Job type</dt>
+              <dd className="text-sm text-stone-700">{job.job_type || 'full'}</dd>
             </div>
             <div>
-              <dt className="text-xs text-gray-400">OCR provider</dt>
-              <dd className="text-sm text-gray-700">{job.ocr_provider || 'n/a'}</dd>
+              <dt className="text-xs text-stone-400">OCR provider</dt>
+              <dd className="text-sm text-stone-700">{job.ocr_provider || 'n/a'}</dd>
             </div>
             <div>
-              <dt className="text-xs text-gray-400">AI provider</dt>
-              <dd className="text-sm text-gray-700">{job.ai_provider || 'n/a'}</dd>
+              <dt className="text-xs text-stone-400">AI provider</dt>
+              <dd className="text-sm text-stone-700">{job.ai_provider || 'n/a'}</dd>
             </div>
             <div>
-              <dt className="text-xs text-gray-400">AI model</dt>
-              <dd className="text-sm text-gray-700">{job.ai_model || 'n/a'}</dd>
+              <dt className="text-xs text-stone-400">AI model</dt>
+              <dd className="text-sm text-stone-700">{job.ai_model || 'n/a'}</dd>
             </div>
             <div>
-              <dt className="text-xs text-gray-400">Prompt version</dt>
-              <dd className="text-sm text-gray-700">{job.prompt_version || 'n/a'}</dd>
+              <dt className="text-xs text-stone-400">Prompt version</dt>
+              <dd className="text-sm text-stone-700">{job.prompt_version || 'n/a'}</dd>
             </div>
             {job.error_message && (
               <div className="col-span-2 sm:col-span-4">
-                <dt className="text-xs text-gray-400">Error</dt>
+                <dt className="text-xs text-stone-400">Error</dt>
                 <dd className="text-sm text-red-600">{job.error_message}</dd>
               </div>
             )}
           </dl>
 
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-200 pt-4">
             <button
               type="button"
               onClick={() => requestReprocess('full')}
@@ -360,7 +360,7 @@ export function DocumentDetailPage() {
       )}
 
       <form
-        className="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-white p-6 sm:grid-cols-2"
+        className="grid grid-cols-1 gap-4 rounded-lg border border-stone-200 bg-stone-50 p-6 sm:grid-cols-2"
         onSubmit={onSave}
       >
         <label className={labelClass}>
@@ -372,7 +372,7 @@ export function DocumentDetailPage() {
             onChange={(event) => setDocument({ ...document, title: event.target.value })}
           />
           {document.title_original && document.title_original !== document.title && (
-            <span className="text-xs font-normal text-gray-500">
+            <span className="text-xs font-normal text-stone-500">
               Original: {document.title_original}
             </span>
           )}
@@ -399,7 +399,7 @@ export function DocumentDetailPage() {
           />
           {document.expand?.document_type?.name_original &&
             document.expand.document_type.name_original !== document.expand.document_type.name && (
-              <span className="text-xs font-normal text-gray-500">
+              <span className="text-xs font-normal text-stone-500">
                 Original: {document.expand.document_type.name_original}
               </span>
             )}
@@ -415,7 +415,7 @@ export function DocumentDetailPage() {
           />
           {document.expand?.correspondent?.name_original &&
             document.expand.correspondent.name_original !== document.expand.correspondent.name && (
-              <span className="text-xs font-normal text-gray-500">
+              <span className="text-xs font-normal text-stone-500">
                 Original: {document.expand.correspondent.name_original}
               </span>
             )}
@@ -430,7 +430,7 @@ export function DocumentDetailPage() {
             onChange={(event) => setDocument({ ...document, purpose: event.target.value })}
           />
           {document.purpose_original && document.purpose_original !== document.purpose && (
-            <span className="text-xs font-normal text-gray-500">
+            <span className="text-xs font-normal text-stone-500">
               Original: {document.purpose_original}
             </span>
           )}
@@ -456,7 +456,7 @@ export function DocumentDetailPage() {
             onChange={(event) => setDocument({ ...document, summary: event.target.value })}
           />
           {document.summary_original && document.summary_original !== document.summary && (
-            <span className="text-xs font-normal text-gray-500">
+            <span className="text-xs font-normal text-stone-500">
               Original: {document.summary_original}
             </span>
           )}
@@ -501,11 +501,11 @@ export function DocumentDetailPage() {
   )
 }
 
-const labelClass = 'flex flex-col gap-1.5 text-sm font-medium text-gray-700'
+const labelClass = 'flex flex-col gap-1.5 text-sm font-medium text-stone-700'
 const inputClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-normal text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
+  'w-full rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm font-normal text-stone-950 outline-none placeholder:text-stone-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
 const readonlyClass =
-  'cursor-default border-gray-200 bg-gray-100/70 text-gray-700 shadow-inner focus:border-gray-200 focus:ring-0'
+  'cursor-default border-stone-200 bg-stone-100/80 text-stone-700 shadow-inner focus:border-stone-200 focus:ring-0'
 
 function fieldClass(editing: boolean) {
   return editing ? inputClass : `${inputClass} ${readonlyClass}`

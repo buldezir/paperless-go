@@ -37,22 +37,22 @@ export function UploadPage() {
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Upload document</h2>
-        <p className="text-sm text-gray-500">Supported formats: PDF, JPEG, PNG, WebP, plain text.</p>
+        <h2 className="text-xl font-semibold text-stone-950">Upload document</h2>
+        <p className="text-sm text-stone-500">Supported formats: PDF, JPEG, PNG, WebP, plain text.</p>
       </div>
 
       <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-        <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center transition-colors hover:border-gray-400">
+        <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-stone-300 bg-stone-50 p-6 text-center transition-colors hover:border-stone-400 hover:bg-white">
           <input
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,application/pdf,image/*,text/plain"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             className="hidden"
           />
-          <span className="text-sm font-medium text-gray-900">
+          <span className="text-sm font-medium text-stone-950">
             {file ? file.name : 'Choose a file'}
           </span>
-          {!file && <span className="text-xs text-gray-400">or drop it here</span>}
+          {!file && <span className="text-xs text-stone-400">or drop it here</span>}
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

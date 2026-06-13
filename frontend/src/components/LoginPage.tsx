@@ -6,7 +6,7 @@ type LoginPageProps = {
 }
 
 const inputClassName =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
+  'w-full rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
 
 export function LoginPage({ onSuccess }: LoginPageProps) {
   const [email, setEmail] = useState('')
@@ -30,18 +30,18 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
-      <section className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-stone-100 px-6">
+      <section className="w-full max-w-sm rounded-lg border border-stone-200 bg-stone-50 p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-900 text-sm text-white">
             P
           </span>
-          <h1 className="text-lg font-semibold text-gray-900">Paperless Go</h1>
+          <h1 className="text-lg font-semibold text-stone-950">Paperless Go</h1>
         </div>
 
         <form className="flex flex-col gap-4" onSubmit={onSubmit}>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Email</span>
+            <span className="text-xs font-medium text-stone-500">Email</span>
             <input
               type="email"
               autoComplete="email"
@@ -53,7 +53,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Password</span>
+            <span className="text-xs font-medium text-stone-500">Password</span>
             <input
               type="password"
               autoComplete="current-password"

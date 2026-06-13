@@ -5,7 +5,7 @@ import type { CorrespondentRecord, DocumentRecord, DocumentTypeRecord } from '..
 import { DocumentCard } from '../components/DocumentCard'
 
 const selectClassName =
-  'rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
+  'rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
 
 function buildDocumentFilter(filters: {
   status: string
@@ -157,8 +157,8 @@ export function IndexPage() {
     <section className="flex flex-col gap-6">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Documents</h2>
-          <p className="text-sm text-gray-500">Upload, search, and review AI-extracted metadata.</p>
+          <h2 className="text-xl font-semibold text-stone-950">Documents</h2>
+          <p className="text-sm text-stone-500">Upload, search, and review AI-extracted metadata.</p>
         </div>
         <Link
           to="/upload"
@@ -175,7 +175,7 @@ export function IndexPage() {
             placeholder="Search title, correspondent, tags, summary..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none placeholder:text-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+            className="w-full rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none placeholder:text-stone-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
           />
           <select
             value={statusFilter}
@@ -193,7 +193,7 @@ export function IndexPage() {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">From date</span>
+            <span className="text-xs font-medium text-stone-500">From date</span>
             <input
               type="date"
               value={dateFrom}
@@ -202,7 +202,7 @@ export function IndexPage() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">To date</span>
+            <span className="text-xs font-medium text-stone-500">To date</span>
             <input
               type="date"
               value={dateTo}
@@ -211,7 +211,7 @@ export function IndexPage() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Document type</span>
+            <span className="text-xs font-medium text-stone-500">Document type</span>
             <select
               value={documentTypeFilter}
               onChange={(event) => setDocumentTypeFilter(event.target.value)}
@@ -226,7 +226,7 @@ export function IndexPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Correspondent</span>
+            <span className="text-xs font-medium text-stone-500">Correspondent</span>
             <select
               value={correspondentFilter}
               onChange={(event) => setCorrespondentFilter(event.target.value)}
@@ -243,16 +243,16 @@ export function IndexPage() {
         </div>
       </div>
 
-      {loading && <p className="text-sm text-gray-500">Loading documents...</p>}
+      {loading && <p className="text-sm text-stone-500">Loading documents...</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && filtered.length === 0 && (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white py-12 text-center">
+        <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 py-12 text-center">
           {hasActiveFilters ? (
-            <p className="text-sm text-gray-500">No documents match your filters.</p>
+            <p className="text-sm text-stone-500">No documents match your filters.</p>
           ) : (
             <>
-              <p className="text-sm text-gray-500">No documents yet.</p>
+              <p className="text-sm text-stone-500">No documents yet.</p>
               <Link to="/upload" className="mt-1 inline-block text-sm font-medium text-gray-900 underline">
                 Upload your first document
               </Link>
