@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import { ensureAuth, fileUrl, pb } from '../lib/pocketbase'
+import { ensureAuth, fileUrl, pb, reprocessDocument } from '../lib/pocketbase'
 import type { DocumentRecord, ProcessingJobRecord } from '../lib/pocketbase'
 
 export function DocumentDetailPage() {
@@ -10,6 +10,7 @@ export function DocumentDetailPage() {
   const [tagInput, setTagInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [reprocessing, setReprocessing] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
@@ -62,6 +63,39 @@ export function DocumentDetailPage() {
       unsubscribe?.()
     }
   }, [documentId])
+
+  const canReprocess =
+    document?.processing_status !== 'processing' && document?.processing_status !== 'pending'
+
+  async function onReprocess() {
+    if (!document || !canReprocess) {
+      return
+    }
+
+    try {
+      setReprocessing(true)
+      setMessage('')
+      setError('')
+
+      await reprocessDocument(document.id)
+
+      const doc = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
+        expand: 'tags',
+      })
+      const jobs = await pb.collection('processing_jobs').getList<ProcessingJobRecord>(1, 1, {
+        filter: `document = "${document.id}"`,
+        sort: '-created',
+      })
+
+      setDocument(doc)
+      setJob(jobs.items[0] ?? null)
+      setMessage('Document queued for reprocessing.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reprocess document')
+    } finally {
+      setReprocessing(false)
+    }
+  }
 
   async function onSave(event: FormEvent) {
     event.preventDefault()
@@ -140,16 +174,26 @@ export function DocumentDetailPage() {
           </h2>
           <p className="text-sm text-gray-500">Status: {document.processing_status}</p>
         </div>
-        {document.file && (
-          <a
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            href={fileUrl(document)}
-            target="_blank"
-            rel="noreferrer"
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onReprocess}
+            disabled={!canReprocess || reprocessing}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Open file
-          </a>
-        )}
+            {reprocessing ? 'Reprocessing...' : 'Reprocess'}
+          </button>
+          {document.file && (
+            <a
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              href={fileUrl(document)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open file
+            </a>
+          )}
+        </div>
       </div>
 
       {job && (

@@ -20,18 +20,19 @@ func Register(app core.App) {
 			return err
 		}
 
-		jobsCollection, err := e.App.FindCollectionByNameOrId("processing_jobs")
-		if err != nil {
-			return err
+		_, err := createProcessingJob(e.App, record.Id)
+		return err
+	})
+
+	app.OnRecordCreate("processing_jobs").BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
+		if record.GetString("task_id") == "" {
+			record.Set("task_id", uuid.New().String())
 		}
-
-		job := core.NewRecord(jobsCollection)
-		job.Set("document", record.Id)
-		job.Set("status", models.JobStatusPending)
-		job.Set("retry_count", 0)
-		job.Set("task_id", uuid.New().String())
-
-		return e.App.Save(job)
+		if record.Get("retry_count") == nil {
+			record.Set("retry_count", 0)
+		}
+		return e.Next()
 	})
 
 	app.OnRecordDelete("documents").BindFunc(func(e *core.RecordEvent) error {
@@ -55,4 +56,21 @@ func Register(app core.App) {
 
 		return e.Next()
 	})
+}
+
+func createProcessingJob(app core.App, documentID string) (*core.Record, error) {
+	jobsCollection, err := app.FindCollectionByNameOrId("processing_jobs")
+	if err != nil {
+		return nil, err
+	}
+
+	job := core.NewRecord(jobsCollection)
+	job.Set("document", documentID)
+	job.Set("status", models.JobStatusPending)
+
+	if err := app.Save(job); err != nil {
+		return nil, err
+	}
+
+	return job, nil
 }

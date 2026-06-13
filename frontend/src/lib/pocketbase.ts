@@ -55,6 +55,18 @@ export function fileUrl(record: DocumentRecord, filename?: string) {
   return pb.files.getURL(record, filename ?? record.file)
 }
 
+export async function reprocessDocument(documentId: string) {
+  await ensureAuth()
+  await pb.collection('documents').update(documentId, {
+    processing_status: 'pending',
+    metadata_source: 'ai',
+  })
+  return pb.collection('processing_jobs').create({
+    document: documentId,
+    status: 'pending',
+  })
+}
+
 export async function ensureAuth() {
   if (pb.authStore.isValid) {
     return
