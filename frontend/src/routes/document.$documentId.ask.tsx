@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
+import { MarkdownContent } from '../components/MarkdownContent'
 import { chatWithDocument, ensureAuth, pb, type ChatMessage, type DocumentRecord } from '../lib/pocketbase'
 
 export function DocumentAskPage() {
@@ -126,13 +127,13 @@ export function DocumentAskPage() {
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-lg px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[85%] rounded-lg px-4 py-2.5 text-sm leading-relaxed ${
                     message.role === 'user'
-                      ? 'bg-gray-900 text-white'
+                      ? 'whitespace-pre-wrap bg-gray-900 text-white'
                       : 'border border-gray-200 bg-gray-50 text-gray-900'
                   }`}
                 >
-                  {message.content}
+                  {message.role === 'user' ? message.content : <MarkdownContent content={message.content} />}
                 </div>
               </div>
             ))}
