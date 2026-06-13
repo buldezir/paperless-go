@@ -59,6 +59,7 @@ export type ProcessingJobRecord = {
   retry_count: number
   ocr_provider: string
   ai_provider: string
+  ai_model: string
   prompt_version: string
   error_message: string
   started_at: string

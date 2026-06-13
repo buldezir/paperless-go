@@ -282,6 +282,10 @@ export function DocumentDetailPage() {
               <dd className="text-sm text-gray-700">{job.ai_provider || 'n/a'}</dd>
             </div>
             <div>
+              <dt className="text-xs text-gray-400">AI model</dt>
+              <dd className="text-sm text-gray-700">{job.ai_model || 'n/a'}</dd>
+            </div>
+            <div>
               <dt className="text-xs text-gray-400">Prompt version</dt>
               <dd className="text-sm text-gray-700">{job.prompt_version || 'n/a'}</dd>
             </div>

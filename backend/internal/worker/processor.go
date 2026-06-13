@@ -85,6 +85,7 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	job.Set("status", models.JobStatusRunning)
 	job.Set("started_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
 	job.Set("ai_provider", aiExtractor.Name())
+	job.Set("ai_model", aiExtractor.Model())
 	job.Set("prompt_version", cfg.ExtractionPromptVer)
 	if job.GetString("job_type") != models.JobTypeExtraction {
 		job.Set("ocr_provider", ocrProvider.Name())
