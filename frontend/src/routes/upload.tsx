@@ -26,7 +26,7 @@ export function UploadPage() {
       formData.append('processing_status', 'pending')
 
       const record = await pb.collection('documents').create(formData)
-      navigate({ to: '/documents/$documentId', params: { documentId: record.id } })
+      navigate({ to: '/document/$documentId', params: { documentId: record.id } })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {

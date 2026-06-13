@@ -1,7 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, Link } from '@tanstack/react-router'
 import { IndexPage } from './routes/index'
 import { UploadPage } from './routes/upload'
-import { DocumentDetailPage } from './routes/documents.$documentId'
+import { DocumentDetailPage } from './routes/document.$documentId'
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -21,7 +21,7 @@ const uploadRoute = createRoute({
 
 const documentRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/documents/$documentId',
+  path: '/document/$documentId',
   component: DocumentDetailPage,
 })
 

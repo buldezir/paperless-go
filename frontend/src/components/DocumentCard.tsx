@@ -28,7 +28,7 @@ export function DocumentCard({ document }: Props) {
 
   return (
     <Link
-      to="/documents/$documentId"
+      to="/document/$documentId"
       params={{ documentId: document.id }}
       className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-gray-300 hover:shadow-sm"
     >

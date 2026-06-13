@@ -4,7 +4,7 @@ import { ensureAuth, fileUrl, pb, reprocessDocument, type ReprocessMode } from '
 import type { DocumentRecord, ProcessingJobRecord } from '../lib/pocketbase'
 
 export function DocumentDetailPage() {
-  const { documentId } = useParams({ from: '/documents/$documentId' })
+  const { documentId } = useParams({ from: '/document/$documentId' })
   const [document, setDocument] = useState<DocumentRecord | null>(null)
   const [job, setJob] = useState<ProcessingJobRecord | null>(null)
   const [tagInput, setTagInput] = useState('')
