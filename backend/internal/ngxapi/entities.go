@@ -36,15 +36,77 @@ func handleGetCorrespondent(e *core.RequestEvent) error {
 }
 
 func handleCreateCorrespondent(e *core.RequestEvent) error {
-	return createNamedRecord(e, "correspondents", mapCorrespondent)
+	return createCorrespondentRecord(e, mapCorrespondent)
 }
 
 func handlePatchCorrespondent(e *core.RequestEvent) error {
-	return patchNamedRecord(e, "correspondents", mapCorrespondent)
+	return patchCorrespondentRecord(e, mapCorrespondent)
 }
 
 func handleDeleteCorrespondent(e *core.RequestEvent) error {
 	return deleteNamedRecord(e, "correspondents")
+}
+
+func createCorrespondentRecord(e *core.RequestEvent, mapper recordMapper) error {
+	var body struct {
+		Name         string `json:"name"`
+		NameOriginal string `json:"name_original"`
+	}
+	if err := e.BindBody(&body); err != nil {
+		return badRequest(e, "Invalid request body.")
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		return badRequest(e, "Name is required.")
+	}
+	original := strings.TrimSpace(body.NameOriginal)
+	if original == "" {
+		original = name
+	}
+
+	coll, err := e.App.FindCollectionByNameOrId("correspondents")
+	if err != nil {
+		return internalError(e, err)
+	}
+
+	record := core.NewRecord(coll)
+	record.Set("name", name)
+	record.Set("name_original", original)
+	if err := e.App.Save(record); err != nil {
+		return badRequest(e, err.Error())
+	}
+
+	return writeJSON(e, http.StatusCreated, mapper(record))
+}
+
+func patchCorrespondentRecord(e *core.RequestEvent, mapper recordMapper) error {
+	ngxID, err := parseNgxID(e.Request.PathValue("id"))
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+	record, err := findRecordByNgxID(e.App, "correspondents", ngxID, "", nil)
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+
+	var body struct {
+		Name         string `json:"name"`
+		NameOriginal string `json:"name_original"`
+	}
+	if err := e.BindBody(&body); err != nil {
+		return badRequest(e, "Invalid request body.")
+	}
+	if name := strings.TrimSpace(body.Name); name != "" {
+		record.Set("name", name)
+	}
+	if original := strings.TrimSpace(body.NameOriginal); original != "" {
+		record.Set("name_original", original)
+	}
+	if err := e.App.Save(record); err != nil {
+		return badRequest(e, err.Error())
+	}
+
+	return writeJSON(e, http.StatusOK, mapper(record))
 }
 
 func handleListDocumentTypes(e *core.RequestEvent) error {

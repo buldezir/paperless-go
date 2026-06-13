@@ -20,7 +20,7 @@ export function IndexPage() {
         await ensureAuth()
         const result = await pb.collection('documents').getList<DocumentRecord>(1, 50, {
           sort: '-created',
-          expand: 'tags,document_type',
+          expand: 'tags,document_type,correspondent',
         })
         if (active) {
           setDocuments(result.items)
@@ -60,6 +60,8 @@ export function IndexPage() {
         doc.title,
         doc.purpose,
         doc.expand?.document_type?.name,
+        doc.expand?.correspondent?.name,
+        doc.expand?.correspondent?.name_original,
         doc.summary,
         ...(doc.expand?.tags?.map((tag) => tag.name) ?? []),
       ]
@@ -89,7 +91,7 @@ export function IndexPage() {
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
           type="search"
-          placeholder="Search title, tags, summary..."
+          placeholder="Search title, correspondent, tags, summary..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none placeholder:text-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"

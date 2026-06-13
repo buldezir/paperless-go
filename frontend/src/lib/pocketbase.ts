@@ -9,6 +9,12 @@ export type DocumentTypeRecord = {
   name: string
 }
 
+export type CorrespondentRecord = {
+  id: string
+  name: string
+  name_original: string
+}
+
 export type DocumentRecord = {
   id: string
   collectionId: string
@@ -23,6 +29,7 @@ export type DocumentRecord = {
   purpose_original: string
   document_date: string
   document_type: string
+  correspondent: string
   ocr_text: string
   summary: string
   summary_original: string
@@ -34,6 +41,7 @@ export type DocumentRecord = {
   expand?: {
     tags?: TagRecord[]
     document_type?: DocumentTypeRecord
+    correspondent?: CorrespondentRecord
   }
 }
 

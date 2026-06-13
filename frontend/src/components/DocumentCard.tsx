@@ -23,6 +23,8 @@ const statusStyles: Record<DocumentRecord['processing_status'], string> = {
 
 export function DocumentCard({ document }: Props) {
   const tags = document.expand?.tags?.map((tag) => tag.name) ?? []
+  const correspondent = document.expand?.correspondent?.name
+  const documentType = document.expand?.document_type?.name
 
   return (
     <Link
@@ -43,7 +45,9 @@ export function DocumentCard({ document }: Props) {
 
       <div>
         <h3 className="font-medium text-gray-900">{document.title || 'Untitled document'}</h3>
-        <p className="text-xs text-gray-500">{document.expand?.document_type?.name || 'Unknown type'}</p>
+        <p className="text-xs text-gray-500">
+          {[documentType || 'Unknown type', correspondent].filter(Boolean).join(' · ')}
+        </p>
       </div>
 
       <p className="line-clamp-3 text-sm text-gray-600">

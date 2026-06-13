@@ -273,36 +273,36 @@ func documentTypeNames(metadata *models.ExtractedMetadata, resultLanguage string
 	return primary, mergeTagNames([]string{original}, []string{translated})
 }
 
-func correspondentNames(metadata *models.ExtractedMetadata, resultLanguage string) (primary string, ensure []string) {
-	original := strings.TrimSpace(metadata.Correspondent)
-	if original == "" {
+func correspondentNames(metadata *models.ExtractedMetadata, resultLanguage string) (displayName, originalName string) {
+	originalName = strings.TrimSpace(metadata.Correspondent)
+	if originalName == "" {
 		for _, raw := range metadata.PeopleOrOrganizations {
 			if name := strings.TrimSpace(raw); name != "" {
-				original = name
+				originalName = name
 				break
 			}
 		}
 	}
-	if original == "" {
-		return "", nil
+	if originalName == "" {
+		return "", ""
 	}
 	if resultLanguage == "" {
-		return original, []string{original}
+		return originalName, originalName
 	}
 
 	translated := strings.TrimSpace(metadata.CorrespondentTranslated)
-	primary = firstNonEmpty(translated, original)
-	return primary, mergeTagNames([]string{original}, []string{translated})
+	displayName = firstNonEmpty(translated, originalName)
+	return displayName, originalName
 }
 
 func applyCorrespondent(app core.App, document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) error {
-	primaryName, names := correspondentNames(metadata, resultLanguage)
-	if primaryName == "" {
+	displayName, originalName := correspondentNames(metadata, resultLanguage)
+	if displayName == "" {
 		document.Set("correspondent", "")
 		return nil
 	}
 
-	correspondentID, err := ensureCorrespondent(app, primaryName, names)
+	correspondentID, err := ensureCorrespondent(app, displayName, originalName)
 	if err != nil {
 		return err
 	}
@@ -310,10 +310,14 @@ func applyCorrespondent(app core.App, document *core.Record, metadata *models.Ex
 	return nil
 }
 
-func ensureCorrespondent(app core.App, primaryName string, names []string) (string, error) {
-	primaryName = strings.TrimSpace(primaryName)
-	if primaryName == "" {
+func ensureCorrespondent(app core.App, displayName, originalName string) (string, error) {
+	displayName = strings.TrimSpace(displayName)
+	originalName = strings.TrimSpace(originalName)
+	if displayName == "" {
 		return "", nil
+	}
+	if originalName == "" {
+		originalName = displayName
 	}
 
 	collection, err := app.FindCollectionByNameOrId("correspondents")
@@ -321,26 +325,71 @@ func ensureCorrespondent(app core.App, primaryName string, names []string) (stri
 		return "", err
 	}
 
-	var primaryID string
-	for _, rawName := range names {
-		name := strings.TrimSpace(rawName)
-		if name == "" {
-			continue
-		}
+	if id, err := findCorrespondentByOriginal(app, originalName); err != nil {
+		return "", err
+	} else if id != "" {
+		return updateCorrespondentNames(app, id, displayName, originalName)
+	}
 
-		id, err := findOrCreateCorrespondent(app, collection, name)
-		if err != nil {
+	if id, err := findCorrespondentID(app, displayName); err != nil {
+		return "", err
+	} else if id != "" {
+		return updateCorrespondentNames(app, id, displayName, originalName)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("name", displayName)
+	record.Set("name_original", originalName)
+	if err := app.Save(record); err != nil {
+		return "", err
+	}
+	return record.Id, nil
+}
+
+func updateCorrespondentNames(app core.App, id, displayName, originalName string) (string, error) {
+	record, err := app.FindRecordById("correspondents", id)
+	if err != nil {
+		return "", err
+	}
+
+	changed := false
+	if name := strings.TrimSpace(record.GetString("name")); name != displayName {
+		record.Set("name", displayName)
+		changed = true
+	}
+	if original := strings.TrimSpace(record.GetString("name_original")); original == "" || original != originalName {
+		record.Set("name_original", originalName)
+		changed = true
+	}
+	if changed {
+		if err := app.Save(record); err != nil {
 			return "", err
 		}
-		if strings.EqualFold(name, primaryName) {
-			primaryID = id
-		}
+	}
+	return record.Id, nil
+}
+
+func findCorrespondentByOriginal(app core.App, originalName string) (string, error) {
+	originalName = strings.TrimSpace(originalName)
+	if originalName == "" {
+		return "", nil
 	}
 
-	if primaryID == "" {
-		return findOrCreateCorrespondent(app, collection, primaryName)
+	existing, err := app.FindRecordsByFilter(
+		"correspondents",
+		"name_original = {:name}",
+		"",
+		1,
+		0,
+		map[string]any{"name": originalName},
+	)
+	if err != nil {
+		return "", err
 	}
-	return primaryID, nil
+	if len(existing) == 0 {
+		return "", nil
+	}
+	return existing[0].Id, nil
 }
 
 func findCorrespondentID(app core.App, name string) (string, error) {
@@ -364,23 +413,6 @@ func findCorrespondentID(app core.App, name string) (string, error) {
 		return "", nil
 	}
 	return existing[0].Id, nil
-}
-
-func findOrCreateCorrespondent(app core.App, collection *core.Collection, name string) (string, error) {
-	id, err := findCorrespondentID(app, name)
-	if err != nil {
-		return "", err
-	}
-	if id != "" {
-		return id, nil
-	}
-
-	record := core.NewRecord(collection)
-	record.Set("name", name)
-	if err := app.Save(record); err != nil {
-		return "", err
-	}
-	return record.Id, nil
 }
 
 func applyDocumentType(app core.App, document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) error {

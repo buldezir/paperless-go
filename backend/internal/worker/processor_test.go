@@ -93,15 +93,12 @@ func TestMergeTagNames(t *testing.T) {
 
 func TestCorrespondentNamesFromExplicitField(t *testing.T) {
 	metadata := &models.ExtractedMetadata{
-		Correspondent:          "Acme GmbH",
-		PeopleOrOrganizations:  []string{"Other Ltd."},
+		Correspondent:         "Acme GmbH",
+		PeopleOrOrganizations: []string{"Other Ltd."},
 	}
-	primary, ensure := correspondentNames(metadata, "")
-	if primary != "Acme GmbH" {
-		t.Fatalf("expected primary Acme GmbH, got %q", primary)
-	}
-	if len(ensure) != 1 || ensure[0] != "Acme GmbH" {
-		t.Fatalf("expected [Acme GmbH], got %v", ensure)
+	display, original := correspondentNames(metadata, "")
+	if display != "Acme GmbH" || original != "Acme GmbH" {
+		t.Fatalf("expected Acme GmbH/Acme GmbH, got %q/%q", display, original)
 	}
 }
 
@@ -109,12 +106,9 @@ func TestCorrespondentNamesFallsBackToPeople(t *testing.T) {
 	metadata := &models.ExtractedMetadata{
 		PeopleOrOrganizations: []string{"Acme Ltd."},
 	}
-	primary, ensure := correspondentNames(metadata, "")
-	if primary != "Acme Ltd." {
-		t.Fatalf("expected primary Acme Ltd., got %q", primary)
-	}
-	if len(ensure) != 1 || ensure[0] != "Acme Ltd." {
-		t.Fatalf("expected [Acme Ltd.], got %v", ensure)
+	display, original := correspondentNames(metadata, "")
+	if display != "Acme Ltd." || original != "Acme Ltd." {
+		t.Fatalf("expected Acme Ltd./Acme Ltd., got %q/%q", display, original)
 	}
 }
 
@@ -123,11 +117,8 @@ func TestCorrespondentNamesWithTranslation(t *testing.T) {
 		Correspondent:           "Acme GmbH",
 		CorrespondentTranslated: "Acme Inc.",
 	}
-	primary, ensure := correspondentNames(metadata, "en")
-	if primary != "Acme Inc." {
-		t.Fatalf("expected primary Acme Inc., got %q", primary)
-	}
-	if len(ensure) != 2 {
-		t.Fatalf("expected 2 correspondents to ensure, got %d: %v", len(ensure), ensure)
+	display, original := correspondentNames(metadata, "en")
+	if display != "Acme Inc." || original != "Acme GmbH" {
+		t.Fatalf("expected Acme Inc./Acme GmbH, got %q/%q", display, original)
 	}
 }

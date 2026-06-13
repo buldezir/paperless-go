@@ -9,6 +9,7 @@ export function DocumentDetailPage() {
   const [job, setJob] = useState<ProcessingJobRecord | null>(null)
   const [tagInput, setTagInput] = useState('')
   const [documentTypeInput, setDocumentTypeInput] = useState('')
+  const [correspondentInput, setCorrespondentInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
@@ -24,7 +25,7 @@ export function DocumentDetailPage() {
         await ensureAuth()
 
         const doc = await pb.collection('documents').getOne<DocumentRecord>(documentId, {
-          expand: 'tags,document_type',
+          expand: 'tags,document_type,correspondent',
         })
 
         const jobs = await pb.collection('processing_jobs').getList<ProcessingJobRecord>(1, 1, {
@@ -37,6 +38,7 @@ export function DocumentDetailPage() {
           setJob(jobs.items[0] ?? null)
           setTagInput((doc.expand?.tags ?? []).map((tag) => tag.name).join(', '))
           setDocumentTypeInput(doc.expand?.document_type?.name ?? '')
+          setCorrespondentInput(doc.expand?.correspondent?.name ?? '')
           setError('')
         }
       } catch (err) {
@@ -87,7 +89,7 @@ export function DocumentDetailPage() {
       await reprocessDocument(document.id, mode)
 
       const doc = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
-        expand: 'tags,document_type',
+        expand: 'tags,document_type,correspondent',
       })
       const jobs = await pb.collection('processing_jobs').getList<ProcessingJobRecord>(1, 1, {
         filter: `document = "${document.id}"`,
@@ -151,11 +153,29 @@ export function DocumentDetailPage() {
         }
       }
 
+      let correspondentId = ''
+      const correspondentName = correspondentInput.trim()
+      if (correspondentName) {
+        const existing = await pb.collection('correspondents').getList(1, 1, {
+          filter: `name = "${correspondentName.replace(/"/g, '\\"')}"`,
+        })
+        if (existing.items.length > 0) {
+          correspondentId = existing.items[0].id
+        } else {
+          const created = await pb.collection('correspondents').create({
+            name: correspondentName,
+            name_original: correspondentName,
+          })
+          correspondentId = created.id
+        }
+      }
+
       const updated = await pb.collection('documents').update<DocumentRecord>(document.id, {
         title: document.title,
         purpose: document.purpose,
         document_date: document.document_date || null,
         document_type: documentTypeId || null,
+        correspondent: correspondentId || null,
         summary: document.summary,
         tags: tagIds,
         metadata_source: 'user',
@@ -166,10 +186,11 @@ export function DocumentDetailPage() {
       setDocument(updated)
       setMessage('Metadata saved.')
       const refreshed = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
-        expand: 'tags,document_type',
+        expand: 'tags,document_type,correspondent',
       })
       setDocument(refreshed)
       setDocumentTypeInput(refreshed.expand?.document_type?.name ?? '')
+      setCorrespondentInput(refreshed.expand?.correspondent?.name ?? '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save metadata')
     } finally {
@@ -306,6 +327,21 @@ export function DocumentDetailPage() {
             value={documentTypeInput}
             onChange={(event) => setDocumentTypeInput(event.target.value)}
           />
+        </label>
+
+        <label className={labelClass}>
+          Correspondent
+          <input
+            className={inputClass}
+            value={correspondentInput}
+            onChange={(event) => setCorrespondentInput(event.target.value)}
+          />
+          {document.expand?.correspondent?.name_original &&
+            document.expand.correspondent.name_original !== document.expand.correspondent.name && (
+              <span className="text-xs font-normal text-gray-500">
+                Original: {document.expand.correspondent.name_original}
+              </span>
+            )}
         </label>
 
         <label className={`${labelClass} sm:col-span-2`}>
