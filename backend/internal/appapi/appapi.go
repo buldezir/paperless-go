@@ -11,7 +11,7 @@ func Register(app core.App) {
 	cfg := config.Load()
 	chatter := ai.NewChatter(
 		cfg.OpenCodeGoAPIKey,
-		cfg.OpenCodeGoModel,
+		cfg.OpenCodeGoChatModel,
 		cfg.OpenCodeGoBaseURL,
 		cfg.OpenCodeGoTimeout,
 	)

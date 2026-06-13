@@ -80,7 +80,7 @@ func (e *OpenCodeGoExtractor) Chat(ctx context.Context, ocrText string, messages
 	req.Header.Set("Content-Type", "application/json")
 
 	requestStart := time.Now()
-	log.Printf("[ai] chat POST %s messages=%d request_bytes=%d", url, len(apiMessages), len(body))
+	log.Printf("[ai] chat POST %s model=%s messages=%d request_bytes=%d", url, e.model, len(apiMessages), len(body))
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
 		log.Printf("[ai] chat request failed duration=%s: %v", time.Since(requestStart).Round(time.Millisecond), err)

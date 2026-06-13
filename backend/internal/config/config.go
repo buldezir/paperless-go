@@ -13,6 +13,7 @@ type Config struct {
 	OCRResultLanguage    string
 	OpenCodeGoAPIKey     string
 	OpenCodeGoModel      string
+	OpenCodeGoChatModel  string
 	OpenCodeGoBaseURL    string
 	OpenCodeGoTimeout    time.Duration
 	WorkerPollInterval   time.Duration
@@ -25,12 +26,15 @@ func Load() Config {
 	pollSec, _ := strconv.Atoi(getEnv("WORKER_POLL_INTERVAL_SEC", "5"))
 	maxRetries, _ := strconv.Atoi(getEnv("WORKER_MAX_RETRIES", "3"))
 
+	openCodeGoModel := getEnv("OPENCODE_GO_MODEL", "deepseek-v4-flash")
+
 	return Config{
 		OCRProvider:         getEnv("OCR_PROVIDER", "google_vision"),
 		OCRAPIKey:           os.Getenv("OCR_API_KEY"),
 		OCRResultLanguage:   strings.ToLower(strings.TrimSpace(os.Getenv("OCR_RESULT_LANGUAGE"))),
 		OpenCodeGoAPIKey:    os.Getenv("OPENCODE_GO_API_KEY"),
-		OpenCodeGoModel:     getEnv("OPENCODE_GO_MODEL", "deepseek-v4-flash"),
+		OpenCodeGoModel:     openCodeGoModel,
+		OpenCodeGoChatModel: getEnv("OPENCODE_GO_CHAT_MODEL", openCodeGoModel),
 		OpenCodeGoBaseURL:   getEnv("OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1"),
 		OpenCodeGoTimeout:   time.Duration(timeoutSec) * time.Second,
 		WorkerPollInterval:  time.Duration(pollSec) * time.Second,
