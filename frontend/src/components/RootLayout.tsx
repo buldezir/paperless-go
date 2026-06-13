@@ -1,4 +1,5 @@
 import { Link, Outlet } from '@tanstack/react-router'
+import { pbAdminUrl } from '../lib/pocketbase'
 
 const navLinkClass =
   'rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900'
@@ -31,6 +32,14 @@ export function RootLayout() {
             >
               Upload
             </Link>
+            <a
+              href={pbAdminUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={navLinkClass}
+            >
+              Admin
+            </a>
           </nav>
         </div>
       </header>
