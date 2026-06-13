@@ -6,6 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"paperless-go/backend/internal/appapi"
+	"paperless-go/backend/internal/hooks"
+	"paperless-go/backend/internal/ngxapi"
+	"paperless-go/backend/internal/worker"
+
 	"github.com/joho/godotenv"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -13,10 +18,6 @@ import (
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/osutils"
-	"paperless-go/backend/internal/appapi"
-	"paperless-go/backend/internal/hooks"
-	"paperless-go/backend/internal/ngxapi"
-	"paperless-go/backend/internal/worker"
 
 	_ "paperless-go/backend/migrations"
 )
@@ -72,8 +73,14 @@ func loadEnvFile() {
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		if err := godotenv.Load(path); err != nil {
-			log.Printf("warning: failed to load %s: %v", path, err)
+		if osutils.IsProbablyGoRun() {
+			if err := godotenv.Overload(path); err != nil {
+				log.Printf("warning: failed to load %s: %v", path, err)
+			}
+		} else {
+			if err := godotenv.Load(path); err != nil {
+				log.Printf("warning: failed to load %s: %v", path, err)
+			}
 		}
 		return
 	}

@@ -25,12 +25,12 @@ func Start(app core.App) {
 		log.Fatalf("[worker] OCR provider: %v", err)
 	}
 	aiExtractor := ai.NewExtractor(
-		cfg.OpenCodeGoAPIKey,
-		cfg.OpenCodeGoModel,
-		cfg.OpenCodeGoBaseURL,
+		cfg.OpenAIAPIKey,
+		cfg.OpenAIModel,
+		cfg.OpenAIBaseURL,
 		cfg.ExtractionPromptVer,
 		cfg.OCRResultLanguage,
-		cfg.OpenCodeGoTimeout,
+		cfg.OpenAITimeout,
 	)
 
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
@@ -104,7 +104,7 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		return failJob(app, job, document, fmt.Errorf("mark document processing: %w", err))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.OpenCodeGoTimeout+30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.OpenAITimeout+30*time.Second)
 	defer cancel()
 
 	var ocrText string

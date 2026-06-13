@@ -49,10 +49,11 @@ All variables live in `.env` at the project root (see `.env.example`).
 | `OCR_PROVIDER` | `google_vision` | OCR provider name (`google_vision`) |
 | `OCR_API_KEY` | empty | Google Cloud Vision API key (required) |
 | `OCR_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, `purpose`, and `document_type` are stored in this language; originals go in `*_original` fields. Tags and document types are created in both languages when a translation is available. |
-| `OPENCODE_GO_API_KEY` | empty | OpenCode Go API key |
-| `OPENCODE_GO_MODEL` | `deepseek-v4-flash` | OpenCode Go model ID |
-| `OPENCODE_GO_BASE_URL` | `https://opencode.ai/zen/go/v1` | OpenCode Go API base URL |
-| `OPENCODE_GO_TIMEOUT_SEC` | `60` | AI request timeout |
+| `OPENAI_API_KEY` | empty | OpenAI-compatible API key |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Model ID for metadata extraction |
+| `OPENAI_CHAT_MODEL` | `OPENAI_MODEL` | Optional model ID for document chat |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
+| `OPENAI_TIMEOUT_SEC` | `60` | AI request timeout |
 | `WORKER_POLL_INTERVAL_SEC` | `5` | Background worker poll interval |
 | `WORKER_MAX_RETRIES` | `3` | Max AI retry attempts per job |
 | `EXTRACTION_PROMPT_VERSION` | `v1` | Stored on each processing job |
@@ -74,13 +75,13 @@ All variables live in `.env` at the project root (see `.env.example`).
 5. Extracted metadata is saved on the document
 6. UI shows status on list and detail pages
 
-## OpenCode Go setup
+## OpenAI setup
 
-1. Subscribe and create an API key at [OpenCode Go](https://opencode.ai/docs/go/)
-2. Set `OPENCODE_GO_API_KEY` in `.env`
-3. Optionally change `OPENCODE_GO_MODEL` (for example `deepseek-v4-flash` or `glm-5`)
+1. Create an API key for OpenAI or another OpenAI-compatible provider.
+2. Set `OPENAI_API_KEY` in `.env`.
+3. Optionally change `OPENAI_MODEL`, `OPENAI_CHAT_MODEL`, or `OPENAI_BASE_URL`.
 
-Without an API key, the backend uses a mock AI extractor for local development.
+Without an API key, AI extraction and document chat return a configuration error.
 
 ## OCR setup
 
@@ -111,5 +112,5 @@ cd backend && go run . migrate create "your_migration_name"
 
 - **Upload succeeds but stays pending:** ensure the backend server is running; the worker starts with `serve`.
 - **OCR fails:** verify `OCR_API_KEY` is set and Vision API is enabled for your Google Cloud project.
-- **AI extraction fails:** verify `OPENCODE_GO_API_KEY` and model name. Check the processing job error on the document detail page.
+- **AI extraction fails:** verify `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and model name. Check the processing job error on the document detail page.
 - **Auth errors in frontend:** delete PocketBase data dir (`backend/pb_data`) and restart to recreate collections, then reload the app.

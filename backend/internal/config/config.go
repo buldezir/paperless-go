@@ -8,35 +8,35 @@ import (
 )
 
 type Config struct {
-	OCRProvider          string
-	OCRAPIKey            string
-	OCRResultLanguage    string
-	OpenCodeGoAPIKey     string
-	OpenCodeGoModel      string
-	OpenCodeGoChatModel  string
-	OpenCodeGoBaseURL    string
-	OpenCodeGoTimeout    time.Duration
-	WorkerPollInterval   time.Duration
-	WorkerMaxRetries     int
-	ExtractionPromptVer  string
+	OCRProvider         string
+	OCRAPIKey           string
+	OCRResultLanguage   string
+	OpenAIAPIKey        string
+	OpenAIModel         string
+	OpenAIChatModel     string
+	OpenAIBaseURL       string
+	OpenAITimeout       time.Duration
+	WorkerPollInterval  time.Duration
+	WorkerMaxRetries    int
+	ExtractionPromptVer string
 }
 
 func Load() Config {
-	timeoutSec, _ := strconv.Atoi(getEnv("OPENCODE_GO_TIMEOUT_SEC", "60"))
+	timeoutSec, _ := strconv.Atoi(getEnv("OPENAI_TIMEOUT_SEC", "60"))
 	pollSec, _ := strconv.Atoi(getEnv("WORKER_POLL_INTERVAL_SEC", "5"))
 	maxRetries, _ := strconv.Atoi(getEnv("WORKER_MAX_RETRIES", "3"))
 
-	openCodeGoModel := getEnv("OPENCODE_GO_MODEL", "deepseek-v4-flash")
+	openAIModel := getEnv("OPENAI_MODEL", "gpt-4o-mini")
 
 	return Config{
 		OCRProvider:         getEnv("OCR_PROVIDER", "google_vision"),
 		OCRAPIKey:           os.Getenv("OCR_API_KEY"),
 		OCRResultLanguage:   strings.ToLower(strings.TrimSpace(os.Getenv("OCR_RESULT_LANGUAGE"))),
-		OpenCodeGoAPIKey:    os.Getenv("OPENCODE_GO_API_KEY"),
-		OpenCodeGoModel:     openCodeGoModel,
-		OpenCodeGoChatModel: getEnv("OPENCODE_GO_CHAT_MODEL", openCodeGoModel),
-		OpenCodeGoBaseURL:   getEnv("OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1"),
-		OpenCodeGoTimeout:   time.Duration(timeoutSec) * time.Second,
+		OpenAIAPIKey:        os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:         openAIModel,
+		OpenAIChatModel:     getEnv("OPENAI_CHAT_MODEL", openAIModel),
+		OpenAIBaseURL:       getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAITimeout:       time.Duration(timeoutSec) * time.Second,
 		WorkerPollInterval:  time.Duration(pollSec) * time.Second,
 		WorkerMaxRetries:    maxRetries,
 		ExtractionPromptVer: getEnv("EXTRACTION_PROMPT_VERSION", "v1"),

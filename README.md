@@ -1,13 +1,13 @@
 # Paperless Go
 
-Document storage MVP built with Go + PocketBase and a React + TanStack Router frontend. Upload documents, run OCR, extract metadata with OpenCode Go AI, and review results in the UI.
+Document storage MVP built with Go + PocketBase and a React + TanStack Router frontend. Upload documents, run OCR, extract metadata with an OpenAI-compatible AI provider, and review results in the UI.
 
 ## Stack
 
 - **Backend:** Go, [PocketBase as a framework](https://pocketbase.io/docs/use-as-framework/)
 - **Frontend:** React, TanStack Router, PocketBase JS SDK
 - **OCR:** Google Cloud Vision (requires `OCR_API_KEY`)
-- **AI:** [OpenCode Go](https://opencode.ai/docs/go/) with mock fallback when no API key is set
+- **AI:** OpenAI-compatible chat completions via the official OpenAI Go SDK
 
 ## Project layout
 
@@ -54,7 +54,7 @@ See [docs/development.md](docs/development.md) for the full list.
 Minimum for local dev:
 
 - Set `OCR_API_KEY` for Google Cloud Vision OCR
-- Set `OPENCODE_GO_API_KEY` to use AI extraction
+- Set `OPENAI_API_KEY` to use AI extraction
 
 ## Features
 

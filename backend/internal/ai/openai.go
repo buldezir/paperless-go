@@ -1,16 +1,16 @@
 package ai
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
 	"paperless-go/backend/internal/models"
 )
 
@@ -47,110 +47,75 @@ Do not include markdown or explanation.`
 	return prompt
 }
 
-type OpenCodeGoExtractor struct {
+type OpenAIClient struct {
 	apiKey         string
 	model          string
 	baseURL        string
 	promptVer      string
 	resultLanguage string
-	httpClient     *http.Client
+	client         openai.Client
 }
 
-func NewOpenCodeGoExtractor(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration) *OpenCodeGoExtractor {
-	return &OpenCodeGoExtractor{
+func NewOpenAIClient(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration) *OpenAIClient {
+	opts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithHTTPClient(&http.Client{Timeout: timeout}),
+		option.WithRequestTimeout(timeout),
+	}
+	if strings.TrimSpace(baseURL) != "" {
+		opts = append(opts, option.WithBaseURL(strings.TrimRight(baseURL, "/")))
+	}
+
+	return &OpenAIClient{
 		apiKey:         apiKey,
 		model:          model,
 		baseURL:        strings.TrimRight(baseURL, "/"),
 		promptVer:      promptVer,
 		resultLanguage: resultLanguage,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
+		client:         openai.NewClient(opts...),
 	}
 }
 
-func (e *OpenCodeGoExtractor) Name() string {
-	return "opencode_go"
+func (c *OpenAIClient) Name() string {
+	return "openai"
 }
 
-func (e *OpenCodeGoExtractor) Model() string {
-	return e.model
+func (c *OpenAIClient) Model() string {
+	return c.model
 }
 
-func (e *OpenCodeGoExtractor) ExtractMetadata(ctx context.Context, ocrText string) (*models.ExtractedMetadata, error) {
-	if e.apiKey == "" {
-		return nil, fmt.Errorf("OPENCODE_GO_API_KEY is not configured")
+func (c *OpenAIClient) ExtractMetadata(ctx context.Context, ocrText string) (*models.ExtractedMetadata, error) {
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY is not configured")
 	}
 
 	inputChars := len(ocrText)
 	sentChars := len(truncate(ocrText, 12000))
 	log.Printf("[ai] extraction starting provider=%s model=%s prompt_ver=%s ocr_chars=%d sent_chars=%d result_lang=%q",
-		e.Name(), e.model, e.promptVer, inputChars, sentChars, e.resultLanguage)
-
-	reqBody := map[string]any{
-		"model": e.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": buildExtractionSystemPrompt(e.resultLanguage)},
-			{"role": "user", "content": fmt.Sprintf("Extract metadata from this OCR text:\n\n%s", truncate(ocrText, 12000))},
-		},
-		"response_format": map[string]string{
-			"type": "json_object",
-		},
-		"temperature": 0.1,
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	url := e.baseURL + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+e.apiKey)
-	req.Header.Set("Content-Type", "application/json")
+		c.Name(), c.model, c.promptVer, inputChars, sentChars, c.resultLanguage)
 
 	requestStart := time.Now()
-	log.Printf("[ai] POST %s request_bytes=%d", url, len(body))
-	resp, err := e.httpClient.Do(req)
+	log.Printf("[ai] chat completion model=%s base_url=%q messages=2", c.model, c.baseURL)
+	chatResp, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model: shared.ChatModel(c.model),
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(buildExtractionSystemPrompt(c.resultLanguage)),
+			openai.UserMessage(fmt.Sprintf("Extract metadata from this OCR text:\n\n%s", truncate(ocrText, 12000))),
+		},
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
+		},
+		Temperature: openai.Float(0.1),
+	})
 	if err != nil {
 		log.Printf("[ai] request failed duration=%s: %v", time.Since(requestStart).Round(time.Millisecond), err)
-		return nil, fmt.Errorf("opencode go request: %w", err)
+		return nil, fmt.Errorf("openai chat completion: %w", err)
 	}
-	defer resp.Body.Close()
+	log.Printf("[ai] response choices=%d duration=%s",
+		len(chatResp.Choices), time.Since(requestStart).Round(time.Millisecond))
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("[ai] response status=%d bytes=%d duration=%s",
-		resp.StatusCode, len(respBody), time.Since(requestStart).Round(time.Millisecond))
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("opencode go error (%d): %s", resp.StatusCode, string(respBody))
-	}
-
-	var chatResp struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("decode opencode go response: %w", err)
-	}
-	if chatResp.Error != nil {
-		return nil, fmt.Errorf("opencode go: %s", chatResp.Error.Message)
-	}
 	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("opencode go returned no choices")
+		return nil, fmt.Errorf("openai returned no choices")
 	}
 
 	content := chatResp.Choices[0].Message.Content
@@ -165,8 +130,8 @@ func (e *OpenCodeGoExtractor) ExtractMetadata(ctx context.Context, ocrText strin
 	return metadata, nil
 }
 
-func (e *OpenCodeGoExtractor) PromptVersion() string {
-	return e.promptVer
+func (c *OpenAIClient) PromptVersion() string {
+	return c.promptVer
 }
 
 func truncate(s string, max int) string {
@@ -185,5 +150,5 @@ func truncateForLog(s string, max int) string {
 }
 
 func NewExtractor(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration) Extractor {
-	return NewOpenCodeGoExtractor(apiKey, model, baseURL, promptVer, resultLanguage, timeout)
+	return NewOpenAIClient(apiKey, model, baseURL, promptVer, resultLanguage, timeout)
 }
