@@ -8,7 +8,7 @@ export function RootLayout() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-2 font-semibold text-gray-900">
             <span className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-900 text-sm text-white">
               P

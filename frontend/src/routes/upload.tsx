@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type SubmitEvent, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ensureAuth, pb } from '../lib/pocketbase'
 
@@ -8,7 +8,7 @@ export function UploadPage() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
-  async function onSubmit(event: FormEvent) {
+  async function onSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!file) {
       setError('Choose a file to upload.')
