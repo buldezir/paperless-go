@@ -61,12 +61,9 @@ func TestApplyExtractedMetadataWithTranslation(t *testing.T) {
 
 func TestDocumentTypeNamesWithoutTranslation(t *testing.T) {
 	metadata := &models.ExtractedMetadata{DocumentType: "Rechnung"}
-	primary, ensure := documentTypeNames(metadata, "")
-	if primary != "Rechnung" {
-		t.Fatalf("expected primary Rechnung, got %q", primary)
-	}
-	if len(ensure) != 1 || ensure[0] != "Rechnung" {
-		t.Fatalf("expected [Rechnung], got %v", ensure)
+	display, original := documentTypeNames(metadata, "")
+	if display != "Rechnung" || original != "Rechnung" {
+		t.Fatalf("expected Rechnung/Rechnung, got %q/%q", display, original)
 	}
 }
 
@@ -75,12 +72,9 @@ func TestDocumentTypeNamesWithTranslation(t *testing.T) {
 		DocumentType:           "Rechnung",
 		DocumentTypeTranslated: "Invoice",
 	}
-	primary, ensure := documentTypeNames(metadata, "en")
-	if primary != "Invoice" {
-		t.Fatalf("expected primary Invoice, got %q", primary)
-	}
-	if len(ensure) != 2 {
-		t.Fatalf("expected 2 document types to ensure, got %d: %v", len(ensure), ensure)
+	display, original := documentTypeNames(metadata, "en")
+	if display != "Invoice" || original != "Rechnung" {
+		t.Fatalf("expected Invoice/Rechnung, got %q/%q", display, original)
 	}
 }
 

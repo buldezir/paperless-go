@@ -118,11 +118,73 @@ func handleGetDocumentType(e *core.RequestEvent) error {
 }
 
 func handleCreateDocumentType(e *core.RequestEvent) error {
-	return createNamedRecord(e, "document_types", mapDocumentType)
+	return createDocumentTypeRecord(e, mapDocumentType)
 }
 
 func handlePatchDocumentType(e *core.RequestEvent) error {
-	return patchNamedRecord(e, "document_types", mapDocumentType)
+	return patchDocumentTypeRecord(e, mapDocumentType)
+}
+
+func createDocumentTypeRecord(e *core.RequestEvent, mapper recordMapper) error {
+	var body struct {
+		Name         string `json:"name"`
+		NameOriginal string `json:"name_original"`
+	}
+	if err := e.BindBody(&body); err != nil {
+		return badRequest(e, "Invalid request body.")
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		return badRequest(e, "Name is required.")
+	}
+	original := strings.TrimSpace(body.NameOriginal)
+	if original == "" {
+		original = name
+	}
+
+	coll, err := e.App.FindCollectionByNameOrId("document_types")
+	if err != nil {
+		return internalError(e, err)
+	}
+
+	record := core.NewRecord(coll)
+	record.Set("name", name)
+	record.Set("name_original", original)
+	if err := e.App.Save(record); err != nil {
+		return badRequest(e, err.Error())
+	}
+
+	return writeJSON(e, http.StatusCreated, mapper(record))
+}
+
+func patchDocumentTypeRecord(e *core.RequestEvent, mapper recordMapper) error {
+	ngxID, err := parseNgxID(e.Request.PathValue("id"))
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+	record, err := findRecordByNgxID(e.App, "document_types", ngxID, "", nil)
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+
+	var body struct {
+		Name         string `json:"name"`
+		NameOriginal string `json:"name_original"`
+	}
+	if err := e.BindBody(&body); err != nil {
+		return badRequest(e, "Invalid request body.")
+	}
+	if name := strings.TrimSpace(body.Name); name != "" {
+		record.Set("name", name)
+	}
+	if original := strings.TrimSpace(body.NameOriginal); original != "" {
+		record.Set("name_original", original)
+	}
+	if err := e.App.Save(record); err != nil {
+		return badRequest(e, err.Error())
+	}
+
+	return writeJSON(e, http.StatusOK, mapper(record))
 }
 
 func handleDeleteDocumentType(e *core.RequestEvent) error {

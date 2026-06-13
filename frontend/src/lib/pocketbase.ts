@@ -7,6 +7,7 @@ export const pb = new PocketBase(pbUrl)
 export type DocumentTypeRecord = {
   id: string
   name: string
+  name_original: string
 }
 
 export type CorrespondentRecord = {

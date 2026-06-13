@@ -60,6 +60,7 @@ export function IndexPage() {
         doc.title,
         doc.purpose,
         doc.expand?.document_type?.name,
+        doc.expand?.document_type?.name_original,
         doc.expand?.correspondent?.name,
         doc.expand?.correspondent?.name_original,
         doc.summary,

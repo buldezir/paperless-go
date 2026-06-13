@@ -259,18 +259,18 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func documentTypeNames(metadata *models.ExtractedMetadata, resultLanguage string) (primary string, ensure []string) {
-	original := strings.TrimSpace(metadata.DocumentType)
-	if original == "" {
-		return "", nil
+func documentTypeNames(metadata *models.ExtractedMetadata, resultLanguage string) (displayName, originalName string) {
+	originalName = strings.TrimSpace(metadata.DocumentType)
+	if originalName == "" {
+		return "", ""
 	}
 	if resultLanguage == "" {
-		return original, []string{original}
+		return originalName, originalName
 	}
 
 	translated := strings.TrimSpace(metadata.DocumentTypeTranslated)
-	primary = firstNonEmpty(translated, original)
-	return primary, mergeTagNames([]string{original}, []string{translated})
+	displayName = firstNonEmpty(translated, originalName)
+	return displayName, originalName
 }
 
 func correspondentNames(metadata *models.ExtractedMetadata, resultLanguage string) (displayName, originalName string) {
@@ -416,13 +416,13 @@ func findCorrespondentID(app core.App, name string) (string, error) {
 }
 
 func applyDocumentType(app core.App, document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) error {
-	primaryName, names := documentTypeNames(metadata, resultLanguage)
-	if primaryName == "" {
+	displayName, originalName := documentTypeNames(metadata, resultLanguage)
+	if displayName == "" {
 		document.Set("document_type", "")
 		return nil
 	}
 
-	typeID, err := ensureDocumentType(app, primaryName, names)
+	typeID, err := ensureDocumentType(app, displayName, originalName)
 	if err != nil {
 		return err
 	}
@@ -430,10 +430,14 @@ func applyDocumentType(app core.App, document *core.Record, metadata *models.Ext
 	return nil
 }
 
-func ensureDocumentType(app core.App, primaryName string, names []string) (string, error) {
-	primaryName = strings.TrimSpace(primaryName)
-	if primaryName == "" {
+func ensureDocumentType(app core.App, displayName, originalName string) (string, error) {
+	displayName = strings.TrimSpace(displayName)
+	originalName = strings.TrimSpace(originalName)
+	if displayName == "" {
 		return "", nil
+	}
+	if originalName == "" {
+		originalName = displayName
 	}
 
 	collection, err := app.FindCollectionByNameOrId("document_types")
@@ -441,26 +445,71 @@ func ensureDocumentType(app core.App, primaryName string, names []string) (strin
 		return "", err
 	}
 
-	var primaryID string
-	for _, rawName := range names {
-		name := strings.TrimSpace(rawName)
-		if name == "" {
-			continue
-		}
+	if id, err := findDocumentTypeByOriginal(app, originalName); err != nil {
+		return "", err
+	} else if id != "" {
+		return updateDocumentTypeNames(app, id, displayName, originalName)
+	}
 
-		id, err := findOrCreateDocumentType(app, collection, name)
-		if err != nil {
+	if id, err := findDocumentTypeID(app, displayName); err != nil {
+		return "", err
+	} else if id != "" {
+		return updateDocumentTypeNames(app, id, displayName, originalName)
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("name", displayName)
+	record.Set("name_original", originalName)
+	if err := app.Save(record); err != nil {
+		return "", err
+	}
+	return record.Id, nil
+}
+
+func updateDocumentTypeNames(app core.App, id, displayName, originalName string) (string, error) {
+	record, err := app.FindRecordById("document_types", id)
+	if err != nil {
+		return "", err
+	}
+
+	changed := false
+	if name := strings.TrimSpace(record.GetString("name")); name != displayName {
+		record.Set("name", displayName)
+		changed = true
+	}
+	if original := strings.TrimSpace(record.GetString("name_original")); original == "" || original != originalName {
+		record.Set("name_original", originalName)
+		changed = true
+	}
+	if changed {
+		if err := app.Save(record); err != nil {
 			return "", err
 		}
-		if strings.EqualFold(name, primaryName) {
-			primaryID = id
-		}
+	}
+	return record.Id, nil
+}
+
+func findDocumentTypeByOriginal(app core.App, originalName string) (string, error) {
+	originalName = strings.TrimSpace(originalName)
+	if originalName == "" {
+		return "", nil
 	}
 
-	if primaryID == "" {
-		return findOrCreateDocumentType(app, collection, primaryName)
+	existing, err := app.FindRecordsByFilter(
+		"document_types",
+		"name_original = {:name}",
+		"",
+		1,
+		0,
+		map[string]any{"name": originalName},
+	)
+	if err != nil {
+		return "", err
 	}
-	return primaryID, nil
+	if len(existing) == 0 {
+		return "", nil
+	}
+	return existing[0].Id, nil
 }
 
 func findDocumentTypeID(app core.App, name string) (string, error) {
@@ -484,23 +533,6 @@ func findDocumentTypeID(app core.App, name string) (string, error) {
 		return "", nil
 	}
 	return existing[0].Id, nil
-}
-
-func findOrCreateDocumentType(app core.App, collection *core.Collection, name string) (string, error) {
-	id, err := findDocumentTypeID(app, name)
-	if err != nil {
-		return "", err
-	}
-	if id != "" {
-		return id, nil
-	}
-
-	record := core.NewRecord(collection)
-	record.Set("name", name)
-	if err := app.Save(record); err != nil {
-		return "", err
-	}
-	return record.Id, nil
 }
 
 func ensureTags(app core.App, names []string) ([]string, error) {

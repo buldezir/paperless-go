@@ -148,7 +148,10 @@ export function DocumentDetailPage() {
         if (existing.items.length > 0) {
           documentTypeId = existing.items[0].id
         } else {
-          const created = await pb.collection('document_types').create({ name: documentTypeName })
+          const created = await pb.collection('document_types').create({
+            name: documentTypeName,
+            name_original: documentTypeName,
+          })
           documentTypeId = created.id
         }
       }
@@ -327,6 +330,12 @@ export function DocumentDetailPage() {
             value={documentTypeInput}
             onChange={(event) => setDocumentTypeInput(event.target.value)}
           />
+          {document.expand?.document_type?.name_original &&
+            document.expand.document_type.name_original !== document.expand.document_type.name && (
+              <span className="text-xs font-normal text-gray-500">
+                Original: {document.expand.document_type.name_original}
+              </span>
+            )}
         </label>
 
         <label className={labelClass}>
