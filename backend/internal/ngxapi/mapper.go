@@ -83,9 +83,12 @@ func mapCorrespondent(record *core.Record) map[string]any {
 func mapDocumentType(record *core.Record) map[string]any {
 	name := record.GetString("name")
 	return map[string]any{
-		"id":   toNgxID(record.Id),
-		"name": name,
-		"slug": slugify(name),
+		"id":                 toNgxID(record.Id),
+		"name":               name,
+		"slug":               slugify(name),
+		"match":              "",
+		"matching_algorithm": 1,
+		"is_insensitive":     true,
 	}
 }
 
