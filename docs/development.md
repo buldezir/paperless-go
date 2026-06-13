@@ -45,6 +45,7 @@ All variables live in `.env` at the project root (see `.env.example`).
 | --- | --- | --- |
 | `OCR_PROVIDER` | `mock` | OCR provider name (`mock`, `google_vision`) |
 | `OCR_API_KEY` | empty | Google Cloud Vision API key when using `google_vision` |
+| `OCR_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, and `purpose` are stored in this language; originals go in `*_original` fields. Tags are added in both languages. |
 | `OPENCODE_GO_API_KEY` | empty | OpenCode Go API key |
 | `OPENCODE_GO_MODEL` | `deepseek-v4-flash` | OpenCode Go model ID |
 | `OPENCODE_GO_BASE_URL` | `https://opencode.ai/zen/go/v1` | OpenCode Go API base URL |

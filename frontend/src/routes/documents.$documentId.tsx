@@ -193,6 +193,11 @@ export function DocumentDetailPage() {
             value={document.title ?? ''}
             onChange={(event) => setDocument({ ...document, title: event.target.value })}
           />
+          {document.title_original && document.title_original !== document.title && (
+            <span className="text-xs font-normal text-gray-500">
+              Original: {document.title_original}
+            </span>
+          )}
         </label>
 
         <label className={labelClass}>
@@ -221,6 +226,11 @@ export function DocumentDetailPage() {
             value={document.purpose ?? ''}
             onChange={(event) => setDocument({ ...document, purpose: event.target.value })}
           />
+          {document.purpose_original && document.purpose_original !== document.purpose && (
+            <span className="text-xs font-normal text-gray-500">
+              Original: {document.purpose_original}
+            </span>
+          )}
         </label>
 
         <label className={`${labelClass} sm:col-span-2`}>
@@ -240,6 +250,11 @@ export function DocumentDetailPage() {
             value={document.summary ?? ''}
             onChange={(event) => setDocument({ ...document, summary: event.target.value })}
           />
+          {document.summary_original && document.summary_original !== document.summary && (
+            <span className="text-xs font-normal text-gray-500">
+              Original: {document.summary_original}
+            </span>
+          )}
         </label>
 
         <label className={`${labelClass} sm:col-span-2`}>

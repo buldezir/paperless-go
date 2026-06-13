@@ -25,6 +25,7 @@ func Start(app core.App) {
 		cfg.OpenCodeGoModel,
 		cfg.OpenCodeGoBaseURL,
 		cfg.ExtractionPromptVer,
+		cfg.OCRResultLanguage,
 		cfg.OpenCodeGoTimeout,
 	)
 
@@ -112,10 +113,8 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	}
 
 	document.Set("ocr_text", ocrText)
-	document.Set("title", metadata.Title)
-	document.Set("purpose", metadata.Purpose)
+	applyExtractedMetadata(document, metadata, cfg.OCRResultLanguage)
 	document.Set("document_type", metadata.DocumentType)
-	document.Set("summary", metadata.Summary)
 	document.Set("confidence", metadata.Confidence)
 	document.Set("people_or_organizations", metadata.PeopleOrOrganizations)
 	document.Set("metadata_source", models.MetadataSourceAI)
@@ -124,7 +123,7 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		document.Set("document_date", metadata.DocumentDate)
 	}
 
-	tagIDs, err := ensureTags(app, metadata.Tags)
+	tagIDs, err := ensureTags(app, mergeTagNames(metadata.Tags, metadata.TagsTranslated))
 	if err != nil {
 		return failJob(app, job, document, fmt.Errorf("tags: %w", err))
 	}
@@ -191,6 +190,53 @@ func extractOCRText(ctx context.Context, app core.App, document *core.Record, pr
 	}
 
 	return text, mimeType, nil
+}
+
+func applyExtractedMetadata(document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) {
+	if resultLanguage != "" {
+		document.Set("title_original", metadata.Title)
+		document.Set("summary_original", metadata.Summary)
+		document.Set("purpose_original", metadata.Purpose)
+		document.Set("title", firstNonEmpty(metadata.TitleTranslated, metadata.Title))
+		document.Set("summary", firstNonEmpty(metadata.SummaryTranslated, metadata.Summary))
+		document.Set("purpose", firstNonEmpty(metadata.PurposeTranslated, metadata.Purpose))
+		return
+	}
+
+	document.Set("title", metadata.Title)
+	document.Set("summary", metadata.Summary)
+	document.Set("purpose", metadata.Purpose)
+}
+
+func mergeTagNames(original, translated []string) []string {
+	seen := make(map[string]struct{}, len(original)+len(translated))
+	names := make([]string, 0, len(original)+len(translated))
+
+	for _, group := range [][]string{original, translated} {
+		for _, rawName := range group {
+			name := strings.TrimSpace(rawName)
+			if name == "" {
+				continue
+			}
+			key := strings.ToLower(name)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			names = append(names, name)
+		}
+	}
+
+	return names
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func ensureTags(app core.App, names []string) ([]string, error) {

@@ -13,11 +13,14 @@ export type DocumentRecord = {
   file: string
   user: string
   title: string
+  title_original: string
   purpose: string
+  purpose_original: string
   document_date: string
   document_type: string
   ocr_text: string
   summary: string
+  summary_original: string
   processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'needs_review'
   metadata_source: 'ai' | 'user'
   confidence: number

@@ -67,3 +67,26 @@ func TestParseExtractedMetadataStripsReasoningTags(t *testing.T) {
 		t.Fatalf("expected title Invoice 001, got %q", metadata.Title)
 	}
 }
+
+func TestParseExtractedMetadataTranslatedFields(t *testing.T) {
+	raw := `{
+		"title": "Rechnung 001",
+		"title_translated": "Invoice 001",
+		"summary": "Eine Rechnung.",
+		"summary_translated": "An invoice.",
+		"tags": ["Rechnung"],
+		"tags_translated": ["Invoice"],
+		"confidence": 0.9
+	}`
+
+	metadata, err := models.ParseExtractedMetadata(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metadata.TitleTranslated != "Invoice 001" {
+		t.Fatalf("expected translated title, got %q", metadata.TitleTranslated)
+	}
+	if len(metadata.TagsTranslated) != 1 || metadata.TagsTranslated[0] != "Invoice" {
+		t.Fatalf("expected translated tags, got %v", metadata.TagsTranslated)
+	}
+}

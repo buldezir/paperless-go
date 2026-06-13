@@ -29,12 +29,16 @@ const (
 
 type ExtractedMetadata struct {
 	Title                 string   `json:"title"`
+	TitleTranslated       string   `json:"title_translated"`
 	Purpose               string   `json:"purpose"`
+	PurposeTranslated     string   `json:"purpose_translated"`
 	DocumentDate          string   `json:"document_date"`
 	DocumentType          string   `json:"document_type"`
 	Tags                  []string `json:"tags"`
+	TagsTranslated        []string `json:"tags_translated"`
 	PeopleOrOrganizations []string `json:"people_or_organizations"`
 	Summary               string   `json:"summary"`
+	SummaryTranslated     string   `json:"summary_translated"`
 	Confidence            float64  `json:"confidence"`
 }
 

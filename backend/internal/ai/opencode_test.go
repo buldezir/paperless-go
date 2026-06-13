@@ -8,7 +8,7 @@ import (
 )
 
 func TestMockExtractorReturnsMetadata(t *testing.T) {
-	extractor := ai.NewMockExtractor("v1")
+	extractor := ai.NewMockExtractor("v1", "")
 	metadata, err := extractor.ExtractMetadata(context.Background(), "Invoice from Acme Supplies")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

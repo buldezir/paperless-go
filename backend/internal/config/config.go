@@ -3,12 +3,14 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
 	OCRProvider          string
 	OCRAPIKey            string
+	OCRResultLanguage    string
 	OpenCodeGoAPIKey     string
 	OpenCodeGoModel      string
 	OpenCodeGoBaseURL    string
@@ -26,6 +28,7 @@ func Load() Config {
 	return Config{
 		OCRProvider:         getEnv("OCR_PROVIDER", "mock"),
 		OCRAPIKey:           os.Getenv("OCR_API_KEY"),
+		OCRResultLanguage:   strings.ToLower(strings.TrimSpace(os.Getenv("OCR_RESULT_LANGUAGE"))),
 		OpenCodeGoAPIKey:    os.Getenv("OPENCODE_GO_API_KEY"),
 		OpenCodeGoModel:     getEnv("OPENCODE_GO_MODEL", "deepseek-v4-flash"),
 		OpenCodeGoBaseURL:   getEnv("OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1"),
