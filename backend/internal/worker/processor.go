@@ -15,6 +15,7 @@ import (
 	"paperless-go/backend/internal/config"
 	"paperless-go/backend/internal/models"
 	"paperless-go/backend/internal/ocr"
+	"paperless-go/backend/internal/preview"
 )
 
 func Start(app core.App) {
@@ -116,9 +117,18 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		log.Printf("[worker] job=%s document=%s skipping OCR, reusing stored text (%d chars)",
 			job.Id, documentID, len(ocrText))
 	default:
+		tmpPath, mimeType, cleanup, err := readDocumentToTempFile(app, document)
+		if err != nil {
+			return failJob(app, job, document, fmt.Errorf("read document file: %w", err))
+		}
+		defer cleanup()
+
+		if err := attachPDFPreview(app, document, tmpPath, mimeType); err != nil {
+			log.Printf("[worker] job=%s document=%s preview failed: %v", job.Id, documentID, err)
+		}
+
 		ocrStart := time.Now()
-		var err error
-		ocrText, mimeType, err = extractOCRText(ctx, app, document, ocrProvider)
+		ocrText, err = ocrProvider.ExtractText(ctx, tmpPath, mimeType)
 		if err != nil {
 			return failJob(app, job, document, fmt.Errorf("ocr: %w", err))
 		}
@@ -203,51 +213,62 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	return app.Save(job)
 }
 
-func extractOCRText(ctx context.Context, app core.App, document *core.Record, provider ocr.Provider) (string, string, error) {
-	documentID := document.Id
+func readDocumentToTempFile(app core.App, document *core.Record) (tmpPath, mimeType string, cleanup func(), err error) {
 	fileName := document.GetString("file")
 	if fileName == "" {
-		return "", "", fmt.Errorf("document has no file")
+		return "", "", func() {}, fmt.Errorf("document has no file")
 	}
-
-	log.Printf("[worker] document=%s OCR starting file=%q provider=%s", documentID, fileName, provider.Name())
 
 	fsys, err := app.NewFilesystem()
 	if err != nil {
-		return "", "", err
+		return "", "", func() {}, err
 	}
 	defer fsys.Close()
 
 	fileKey := document.BaseFilesPath() + "/" + fileName
 	reader, err := fsys.GetReader(fileKey)
 	if err != nil {
-		return "", "", fmt.Errorf("open uploaded file: %w", err)
+		return "", "", func() {}, fmt.Errorf("open uploaded file: %w", err)
 	}
 	defer reader.Close()
 
-	tmpFile, err := os.CreateTemp("", "paperless-ocr-*"+filepath.Ext(fileName))
+	tmpFile, err := os.CreateTemp("", "paperless-doc-*"+filepath.Ext(fileName))
 	if err != nil {
-		return "", "", err
+		return "", "", func() {}, err
 	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	tmpPath = tmpFile.Name()
+	cleanup = func() { os.Remove(tmpPath) }
 
 	if _, err := io.Copy(tmpFile, reader); err != nil {
 		tmpFile.Close()
-		return "", "", err
+		cleanup()
+		return "", "", func() {}, err
 	}
 	if err := tmpFile.Close(); err != nil {
-		return "", "", err
+		cleanup()
+		return "", "", func() {}, err
 	}
 
-	mimeType := guessMimeType(fileName)
-	log.Printf("[worker] document=%s OCR calling provider mime=%s tmp=%s", documentID, mimeType, filepath.Base(tmpPath))
-	text, err := provider.ExtractText(ctx, tmpPath, mimeType)
+	return tmpPath, guessMimeType(fileName), cleanup, nil
+}
+
+func attachPDFPreview(app core.App, document *core.Record, filePath, mimeType string) error {
+	if mimeType != "application/pdf" {
+		return nil
+	}
+
+	previewFile, err := preview.GenerateFirstPagePNG(filePath)
 	if err != nil {
-		return "", mimeType, err
+		return err
 	}
 
-	return text, mimeType, nil
+	document.Set("preview", previewFile)
+	if err := app.Save(document); err != nil {
+		return fmt.Errorf("save preview: %w", err)
+	}
+
+	log.Printf("[worker] document=%s preview saved file=%q", document.Id, previewFile.Name)
+	return nil
 }
 
 func applyExtractedMetadata(document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) {

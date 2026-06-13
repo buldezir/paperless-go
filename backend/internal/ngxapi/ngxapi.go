@@ -75,10 +75,10 @@ func Register(app core.App) {
 
 func registerDocumentRoutes(g *router.RouterGroup[*core.RequestEvent]) {
 	list := []struct {
-		list, item, itemDownload, postDocument string
+		list, item, itemDownload, itemThumb, postDocument string
 	}{
-		{"/documents/", "/documents/{id}/", "/documents/{id}/download/", "/documents/post_document/"},
-		{"/documents", "/documents/{id}", "/documents/{id}/download", "/documents/post_document"},
+		{"/documents/", "/documents/{id}/", "/documents/{id}/download/", "/documents/{id}/thumb/", "/documents/post_document/"},
+		{"/documents", "/documents/{id}", "/documents/{id}/download", "/documents/{id}/thumb", "/documents/post_document"},
 	}
 	for _, r := range list {
 		g.GET(r.list, bindAuth(handleListDocuments))
@@ -86,6 +86,7 @@ func registerDocumentRoutes(g *router.RouterGroup[*core.RequestEvent]) {
 		g.PATCH(r.item, bindAuth(handlePatchDocument))
 		g.DELETE(r.item, bindAuth(handleDeleteDocument))
 		g.GET(r.itemDownload, bindAuth(handleDownloadDocument))
+		g.GET(r.itemThumb, bindAuth(handleDocumentThumb))
 		g.POST(r.postDocument, bindAuth(handlePostDocument))
 	}
 }

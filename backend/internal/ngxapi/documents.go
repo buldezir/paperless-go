@@ -198,6 +198,27 @@ func handleDownloadDocument(e *core.RequestEvent) error {
 	return fsys.Serve(e.Response, e.Request, fileKey, fileName)
 }
 
+func handleDocumentThumb(e *core.RequestEvent) error {
+	record, err := findOwnedDocument(e.App, e.Auth.Id, e.Request.PathValue("id"))
+	if err != nil {
+		return notFound(e, "Not found.")
+	}
+
+	fileName := record.GetString("preview")
+	if fileName == "" {
+		return notFound(e, "Document has no preview.")
+	}
+
+	fsys, err := e.App.NewFilesystem()
+	if err != nil {
+		return internalError(e, err)
+	}
+	defer fsys.Close()
+
+	fileKey := record.BaseFilesPath() + "/" + fileName
+	return fsys.Serve(e.Response, e.Request, fileKey, fileName)
+}
+
 func findTaskIDForDocument(app core.App, documentID string) (string, error) {
 	jobs, err := app.FindRecordsByFilter(
 		"processing_jobs",

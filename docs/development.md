@@ -5,6 +5,9 @@
 - Go 1.23+
 - Node.js 20+
 - npm
+- [poppler-utils](https://poppler.freedesktop.org/) (`pdftoppm`) for PDF preview thumbnails
+
+On macOS: `brew install poppler`. On Debian/Ubuntu: `apt install poppler-utils`.
 
 ## Running locally
 
@@ -67,7 +70,7 @@ All variables live in `.env` at the project root (see `.env.example`).
 1. User uploads a document from `/upload`
 2. PocketBase stores the file and creates a `processing_jobs` record via Go hook
 3. Background worker picks pending jobs
-4. Worker runs OCR, then AI extraction
+4. Worker generates a PNG preview from the first PDF page (via `pdftoppm`), then runs OCR and AI extraction
 5. Extracted metadata is saved on the document
 6. UI shows status on list and detail pages
 
