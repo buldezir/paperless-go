@@ -75,6 +75,17 @@ export function DocumentDetailPage() {
 
   const canReprocessExtraction = canReprocess && Boolean(document?.ocr_text?.trim())
 
+  function requestReprocess(mode: ReprocessMode) {
+    const confirmed = window.confirm(
+      mode === 'full'
+        ? 'Run OCR and extraction again from the original file? Existing metadata may be overwritten.'
+        : 'Re-run extraction using the current OCR text? Existing metadata may be overwritten.',
+    )
+    if (confirmed) {
+      void onReprocess(mode)
+    }
+  }
+
   async function onReprocess(mode: ReprocessMode) {
     if (!document || !canReprocess) {
       return
@@ -249,25 +260,6 @@ export function DocumentDetailPage() {
           >
             Ask AI
           </Link>
-          <select
-            value=""
-            onChange={(event) => {
-              const mode = event.target.value as ReprocessMode
-              if (mode) {
-                void onReprocess(mode)
-              }
-            }}
-            disabled={!canReprocess || reprocessing}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="" disabled>
-              {reprocessing ? 'Reprocessing...' : 'Reprocess'}
-            </option>
-            <option value="full">Reprocess full (with OCR)</option>
-            <option value="extraction" disabled={!canReprocessExtraction}>
-              Reprocess extraction
-            </option>
-          </select>
           {document.file && (
             <a
               className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
@@ -278,7 +270,7 @@ export function DocumentDetailPage() {
               Open file
             </a>
           )}
-          {job && (
+          {job ? (
             <button
               type="button"
               onClick={() => setShowProcessingJob((visible) => !visible)}
@@ -305,7 +297,7 @@ export function DocumentDetailPage() {
                 />
               </svg>
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -344,6 +336,26 @@ export function DocumentDetailPage() {
               </div>
             )}
           </dl>
+
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+            <button
+              type="button"
+              onClick={() => requestReprocess('full')}
+              disabled={!canReprocess || reprocessing}
+              className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              {reprocessing ? 'Reprocessing...' : 'Reprocess full (with OCR)'}
+            </button>
+            <button
+              type="button"
+              onClick={() => requestReprocess('extraction')}
+              disabled={!canReprocessExtraction || reprocessing}
+              title={!canReprocessExtraction ? 'OCR text required' : undefined}
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              {reprocessing ? 'Reprocessing...' : 'Reprocess extraction'}
+            </button>
+          </div>
         </div>
       )}
 
