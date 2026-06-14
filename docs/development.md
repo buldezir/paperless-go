@@ -48,7 +48,7 @@ All variables live in `.env` at the project root (see `.env.example`).
 | --- | --- | --- |
 | `OCR_PROVIDER` | `google_vision` | OCR provider name (`google_vision`) |
 | `OCR_API_KEY` | empty | Google Cloud Vision API key (required) |
-| `OCR_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, `purpose`, and `document_type` are stored in this language; originals go in `*_original` fields. Tags and document types are created in both languages when a translation is available. |
+| `PROCESSING_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, `purpose`, and `document_type` are stored in this language; originals go in `*_original` fields. Tags and document types are created in both languages when a translation is available. |
 | `OPENAI_API_KEY` | empty | OpenAI-compatible API key |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Model ID for metadata extraction |
 | `OPENAI_CHAT_MODEL` | `OPENAI_MODEL` | Optional model ID for document chat |

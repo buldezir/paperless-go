@@ -10,7 +10,7 @@ import (
 type Config struct {
 	OCRProvider         string
 	OCRAPIKey           string
-	OCRResultLanguage   string
+	ProcessingResultLanguage string
 	OpenAIAPIKey        string
 	OpenAIModel         string
 	OpenAIChatModel     string
@@ -30,7 +30,7 @@ func Load() Config {
 	return Config{
 		OCRProvider:         getEnv("OCR_PROVIDER", "google_vision"),
 		OCRAPIKey:           os.Getenv("OCR_API_KEY"),
-		OCRResultLanguage:   strings.ToLower(strings.TrimSpace(os.Getenv("OCR_RESULT_LANGUAGE"))),
+		ProcessingResultLanguage: strings.ToLower(strings.TrimSpace(os.Getenv("PROCESSING_RESULT_LANGUAGE"))),
 		OpenAIAPIKey:        os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:         openAIModel,
 		OpenAIChatModel:     getEnv("OPENAI_CHAT_MODEL", openAIModel),

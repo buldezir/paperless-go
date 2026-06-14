@@ -108,13 +108,13 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	if jobType != models.JobTypeExtraction {
 		document.Set("ocr_text", ocrText)
 	}
-	applyExtractedMetadata(document, metadata, cfg.OCRResultLanguage)
-	if err := applyDocumentType(app, document, metadata, cfg.OCRResultLanguage); err != nil {
+	applyExtractedMetadata(document, metadata, cfg.ProcessingResultLanguage)
+	if err := applyDocumentType(app, document, metadata, cfg.ProcessingResultLanguage); err != nil {
 		return failJob(app, job, document, fmt.Errorf("document type: %w", err))
 	}
 	log.Printf("[worker] job=%s document=%s document_type=%s",
 		job.Id, documentID, truncateForLog(document.GetString("document_type"), 40))
-	if err := applyCorrespondent(app, document, metadata, cfg.OCRResultLanguage); err != nil {
+	if err := applyCorrespondent(app, document, metadata, cfg.ProcessingResultLanguage); err != nil {
 		return failJob(app, job, document, fmt.Errorf("correspondent: %w", err))
 	}
 	log.Printf("[worker] job=%s document=%s correspondent=%s",

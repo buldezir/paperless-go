@@ -31,7 +31,7 @@ func Register(app core.App) {
 		cfg.OpenAIModel,
 		cfg.OpenAIBaseURL,
 		cfg.ExtractionPromptVer,
-		cfg.OCRResultLanguage,
+		cfg.ProcessingResultLanguage,
 		cfg.OpenAITimeout,
 	)
 
