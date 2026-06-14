@@ -54,7 +54,7 @@ All variables live in `.env` at the project root (see `.env.example`).
 | `OPENAI_CHAT_MODEL` | `OPENAI_MODEL` | Optional model ID for document chat |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
 | `OPENAI_TIMEOUT_SEC` | `60` | AI request timeout |
-| `WORKER_POLL_INTERVAL_SEC` | `5` | Background worker poll interval |
+| `WORKER_CRON_EXPR` | `* * * * *` | Cron expression for sweeping stuck pending jobs (minute granularity; new jobs dispatch immediately via hooks) |
 | `WORKER_MAX_RETRIES` | `3` | Max AI retry attempts per job |
 | `EXTRACTION_PROMPT_VERSION` | `v1` | Stored on each processing job |
 
@@ -70,10 +70,12 @@ All variables live in `.env` at the project root (see `.env.example`).
 
 1. User uploads a document from `/upload`
 2. PocketBase stores the file and creates a `processing_jobs` record via Go hook
-3. Background worker picks pending jobs
+3. An `OnRecordAfterCreateSuccess` hook dispatches the job immediately; a cron job (`process_pending_jobs`) sweeps any stuck pending jobs
 4. Worker generates a PNG preview from the first PDF page (via `pdftoppm`), then runs OCR and AI extraction
 5. Extracted metadata is saved on the document
 6. UI shows status on list and detail pages
+
+Cron jobs are visible and manually triggerable in PocketBase Admin → Settings → Crons.
 
 ## OpenAI setup
 

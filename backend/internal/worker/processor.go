@@ -18,64 +18,6 @@ import (
 	"paperless-go/backend/internal/preview"
 )
 
-func Start(app core.App) {
-	cfg := config.Load()
-	ocrProvider, err := ocr.NewProvider(cfg.OCRProvider, cfg.OCRAPIKey)
-	if err != nil {
-		log.Fatalf("[worker] OCR provider: %v", err)
-	}
-	aiExtractor := ai.NewExtractor(
-		cfg.OpenAIAPIKey,
-		cfg.OpenAIModel,
-		cfg.OpenAIBaseURL,
-		cfg.ExtractionPromptVer,
-		cfg.OCRResultLanguage,
-		cfg.OpenAITimeout,
-	)
-
-	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		log.Printf("[worker] starting poll_interval=%s ocr=%s ai=%s model=%s",
-			cfg.WorkerPollInterval, ocrProvider.Name(), aiExtractor.Name(), aiExtractor.Model())
-		go runWorker(app, cfg, ocrProvider, aiExtractor)
-		return e.Next()
-	})
-}
-
-func runWorker(app core.App, cfg config.Config, ocrProvider ocr.Provider, aiExtractor ai.Extractor) {
-	ticker := time.NewTicker(cfg.WorkerPollInterval)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		if err := processNextJob(app, cfg, ocrProvider, aiExtractor); err != nil {
-			log.Printf("worker error: %v", err)
-		}
-	}
-}
-
-func processNextJob(app core.App, cfg config.Config, ocrProvider ocr.Provider, aiExtractor ai.Extractor) error {
-	jobs, err := app.FindRecordsByFilter(
-		"processing_jobs",
-		"status = {:status}",
-		"created",
-		1,
-		0,
-		map[string]any{"status": models.JobStatusPending},
-	)
-	if err != nil {
-		return err
-	}
-	if len(jobs) == 0 {
-		return nil
-	}
-
-	job := jobs[0]
-	log.Printf("[worker] picked job=%s document=%s type=%s retry=%d",
-		job.Id, job.GetString("document"), job.GetString("job_type"), int(job.GetFloat("retry_count")))
-	return app.RunInTransaction(func(txApp core.App) error {
-		return handleJob(txApp, cfg, job, ocrProvider, aiExtractor)
-	})
-}
-
 func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider ocr.Provider, aiExtractor ai.Extractor) error {
 	jobStart := time.Now()
 	documentID := job.GetString("document")

@@ -16,14 +16,13 @@ type Config struct {
 	OpenAIChatModel     string
 	OpenAIBaseURL       string
 	OpenAITimeout       time.Duration
-	WorkerPollInterval  time.Duration
+	WorkerCronExpr      string
 	WorkerMaxRetries    int
 	ExtractionPromptVer string
 }
 
 func Load() Config {
 	timeoutSec, _ := strconv.Atoi(getEnv("OPENAI_TIMEOUT_SEC", "60"))
-	pollSec, _ := strconv.Atoi(getEnv("WORKER_POLL_INTERVAL_SEC", "5"))
 	maxRetries, _ := strconv.Atoi(getEnv("WORKER_MAX_RETRIES", "3"))
 
 	openAIModel := getEnv("OPENAI_MODEL", "gpt-4o-mini")
@@ -37,7 +36,7 @@ func Load() Config {
 		OpenAIChatModel:     getEnv("OPENAI_CHAT_MODEL", openAIModel),
 		OpenAIBaseURL:       getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAITimeout:       time.Duration(timeoutSec) * time.Second,
-		WorkerPollInterval:  time.Duration(pollSec) * time.Second,
+		WorkerCronExpr:      getEnv("WORKER_CRON_EXPR", "* * * * *"),
 		WorkerMaxRetries:    maxRetries,
 		ExtractionPromptVer: getEnv("EXTRACTION_PROMPT_VERSION", "v1"),
 	}
