@@ -1,0 +1,10 @@
+.git
+.github
+.env
+.env.*
+**/.env
+**/.env.*
+**/node_modules
+backend/pb_data*
+docs
+*.md
