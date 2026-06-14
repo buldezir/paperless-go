@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"paperless-go/backend/internal/appapi"
+	"paperless-go/backend/internal/authguard"
 	"paperless-go/backend/internal/hooks"
 	"paperless-go/backend/internal/ngxapi"
 	"paperless-go/backend/internal/worker"
@@ -48,6 +49,7 @@ func main() {
 	})
 
 	hooks.Register(app)
+	authguard.Register(app)
 	appapi.Register(app)
 	ngxapi.Register(app)
 	worker.Start(app)
