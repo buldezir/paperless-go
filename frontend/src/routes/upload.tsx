@@ -1,12 +1,58 @@
-import { type SubmitEvent, useState } from 'react'
+import { type DragEvent, type SubmitEvent, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ensureAuth, pb } from '../lib/pocketbase'
+
+const ACCEPTED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.txt'])
+const ACCEPTED_MIME_PREFIXES = ['image/', 'text/plain']
+const ACCEPTED_MIME_TYPES = new Set(['application/pdf'])
+
+function isAcceptedFile(file: File) {
+  const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : ''
+  if (ACCEPTED_EXTENSIONS.has(extension)) return true
+  if (ACCEPTED_MIME_TYPES.has(file.type)) return true
+  return ACCEPTED_MIME_PREFIXES.some((prefix) => file.type.startsWith(prefix))
+}
 
 export function UploadPage() {
   const navigate = useNavigate()
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
+
+  function selectFile(next: File | null) {
+    if (!next) {
+      setFile(null)
+      return
+    }
+    if (!isAcceptedFile(next)) {
+      setError('Unsupported file type. Use PDF, JPEG, PNG, WebP, or plain text.')
+      return
+    }
+    setError('')
+    setFile(next)
+  }
+
+  function onDragOver(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+  }
+
+  function onDragEnter(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    setDragging(true)
+  }
+
+  function onDragLeave(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    if (event.currentTarget.contains(event.relatedTarget as Node)) return
+    setDragging(false)
+  }
+
+  function onDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    setDragging(false)
+    selectFile(event.dataTransfer.files?.[0] ?? null)
+  }
 
   async function onSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -42,11 +88,21 @@ export function UploadPage() {
       </div>
 
       <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-        <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-stone-300 bg-stone-50 p-6 text-center transition-colors hover:border-stone-400 hover:bg-white">
+        <label
+          className={`flex min-h-44 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-6 text-center transition-colors ${
+            dragging
+              ? 'border-gray-900 bg-white'
+              : 'border-stone-300 bg-stone-50 hover:border-stone-400 hover:bg-white'
+          }`}
+          onDragOver={onDragOver}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
           <input
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,application/pdf,image/*,text/plain"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
             className="hidden"
           />
           <span className="text-sm font-medium text-stone-950">
