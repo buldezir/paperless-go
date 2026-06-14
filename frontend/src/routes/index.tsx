@@ -5,14 +5,7 @@ import type { CorrespondentRecord, DocumentRecord, DocumentTypeRecord } from '..
 import { DocumentCard } from '../components/DocumentCard'
 import { Pagination } from '../components/Pagination'
 
-const PAGE_SIZE = (() => {
-  const raw = import.meta.env.VITE_DOCUMENTS_PAGE_SIZE
-  if (!raw) {
-    return 12
-  }
-  const parsed = Number.parseInt(raw, 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 12
-})()
+const PAGE_SIZE = 12
 
 const selectClassName =
   'rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
