@@ -27,31 +27,13 @@ docs/       Development guide
 
 ```bash
 cp .env.example .env
+# Edit .env and set OCR_API_KEY and OPENAI_API_KEY
+docker compose up --build
 ```
 
-### Backend
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090). Data is stored in a Docker volume (`app_data`).
 
-```bash
-cd backend
-go run . serve --http=127.0.0.1:8090
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open `http://127.0.0.1:5173` for local dev, or build the frontend and serve it from PocketBase:
-
-```bash
-cd frontend && npm run build
-cd ../backend && go run . serve --http=127.0.0.1:8090
-```
-
-Then open `http://127.0.0.1:8090`.
+For local development without Docker, see [docs/development.md](docs/development.md).
 
 ## Environment variables
 
