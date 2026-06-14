@@ -1,11 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ensureAuth, pb } from '../lib/pocketbase'
 import type { CorrespondentRecord, DocumentRecord, DocumentTypeRecord } from '../lib/pocketbase'
 import { DocumentCard } from '../components/DocumentCard'
+import { Pagination } from '../components/Pagination'
+
+const PAGE_SIZE = (() => {
+  const raw = import.meta.env.VITE_DOCUMENTS_PAGE_SIZE
+  if (!raw) {
+    return 12
+  }
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 12
+})()
 
 const selectClassName =
   'rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900'
+
+function escapeFilterValue(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
 
 function buildDocumentFilter(filters: {
   status: string
@@ -13,6 +27,7 @@ function buildDocumentFilter(filters: {
   dateTo: string
   documentType: string
   correspondent: string
+  search: string
 }) {
   const parts: string[] = []
 
@@ -31,6 +46,12 @@ function buildDocumentFilter(filters: {
   if (filters.dateTo) {
     parts.push(`document_date <= "${filters.dateTo}"`)
   }
+  if (filters.search) {
+    const query = escapeFilterValue(filters.search)
+    parts.push(
+      `(title ~ "${query}" || purpose ~ "${query}" || summary ~ "${query}" || ocr_text ~ "${query}")`,
+    )
+  }
 
   return parts.length > 0 ? parts.join(' && ') : undefined
 }
@@ -40,13 +61,25 @@ export function IndexPage() {
   const [documentTypes, setDocumentTypes] = useState<DocumentTypeRecord[]>([])
   const [correspondents, setCorrespondents] = useState<CorrespondentRecord[]>([])
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [documentTypeFilter, setDocumentTypeFilter] = useState('all')
   const [correspondentFilter, setCorrespondentFilter] = useState('all')
+  const [page, setPage] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [search])
 
   useEffect(() => {
     let active = true
@@ -89,14 +122,17 @@ export function IndexPage() {
           dateTo,
           documentType: documentTypeFilter,
           correspondent: correspondentFilter,
+          search: debouncedSearch,
         })
-        const result = await pb.collection('documents').getList<DocumentRecord>(1, 50, {
+        const result = await pb.collection('documents').getList<DocumentRecord>(page, PAGE_SIZE, {
           sort: '-created',
           expand: 'tags,document_type,correspondent',
           ...(filter ? { filter } : {}),
         })
         if (active) {
           setDocuments(result.items)
+          setTotalItems(result.totalItems)
+          setTotalPages(result.totalPages)
           setError('')
         }
       } catch (err) {
@@ -124,7 +160,7 @@ export function IndexPage() {
       active = false
       unsubscribe?.()
     }
-  }, [statusFilter, dateFrom, dateTo, documentTypeFilter, correspondentFilter])
+  }, [page, statusFilter, dateFrom, dateTo, documentTypeFilter, correspondentFilter, debouncedSearch])
 
   const hasActiveFilters =
     statusFilter !== 'all' ||
@@ -132,26 +168,7 @@ export function IndexPage() {
     dateTo !== '' ||
     documentTypeFilter !== 'all' ||
     correspondentFilter !== 'all' ||
-    search !== ''
-
-  const filtered = useMemo(() => {
-    return documents.filter((doc) => {
-      const haystack = [
-        doc.title,
-        doc.purpose,
-        doc.expand?.document_type?.name,
-        doc.expand?.document_type?.name_original,
-        doc.expand?.correspondent?.name,
-        doc.expand?.correspondent?.name_original,
-        doc.summary,
-        ...(doc.expand?.tags?.map((tag) => tag.name) ?? []),
-      ]
-        .join(' ')
-        .toLowerCase()
-
-      return !search || haystack.includes(search.toLowerCase())
-    })
-  }, [documents, search])
+    debouncedSearch !== ''
 
   return (
     <section className="flex flex-col gap-6">
@@ -172,14 +189,17 @@ export function IndexPage() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <input
             type="search"
-            placeholder="Search title, correspondent, tags, summary..."
+            placeholder="Search title, purpose, summary..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="w-full rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none placeholder:text-stone-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
           />
           <select
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(event) => {
+              setStatusFilter(event.target.value)
+              setPage(1)
+            }}
             className={`${selectClassName} sm:w-48`}
           >
             <option value="all">All statuses</option>
@@ -197,7 +217,10 @@ export function IndexPage() {
             <input
               type="date"
               value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
+              onChange={(event) => {
+                setDateFrom(event.target.value)
+                setPage(1)
+              }}
               className={selectClassName}
             />
           </label>
@@ -206,7 +229,10 @@ export function IndexPage() {
             <input
               type="date"
               value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
+              onChange={(event) => {
+                setDateTo(event.target.value)
+                setPage(1)
+              }}
               className={selectClassName}
             />
           </label>
@@ -214,7 +240,10 @@ export function IndexPage() {
             <span className="text-xs font-medium text-stone-500">Document type</span>
             <select
               value={documentTypeFilter}
-              onChange={(event) => setDocumentTypeFilter(event.target.value)}
+              onChange={(event) => {
+                setDocumentTypeFilter(event.target.value)
+                setPage(1)
+              }}
               className={selectClassName}
             >
               <option value="all">All types</option>
@@ -229,7 +258,10 @@ export function IndexPage() {
             <span className="text-xs font-medium text-stone-500">Correspondent</span>
             <select
               value={correspondentFilter}
-              onChange={(event) => setCorrespondentFilter(event.target.value)}
+              onChange={(event) => {
+                setCorrespondentFilter(event.target.value)
+                setPage(1)
+              }}
               className={selectClassName}
             >
               <option value="all">All correspondents</option>
@@ -246,7 +278,7 @@ export function IndexPage() {
       {loading && <p className="text-sm text-stone-500">Loading documents...</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {!loading && filtered.length === 0 && (
+      {!loading && documents.length === 0 && (
         <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 py-12 text-center">
           {hasActiveFilters ? (
             <p className="text-sm text-stone-500">No documents match your filters.</p>
@@ -261,11 +293,23 @@ export function IndexPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((document) => (
-          <DocumentCard key={document.id} document={document} />
-        ))}
-      </div>
+      {!loading && documents.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {documents.map((document) => (
+              <DocumentCard key={document.id} document={document} />
+            ))}
+          </div>
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
+        </>
+      )}
     </section>
   )
 }
