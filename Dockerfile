@@ -22,6 +22,6 @@ RUN apk add --no-cache poppler-utils
 WORKDIR /app
 COPY --from=backend-builder /app/backend/paperless-go /app/paperless-go
 COPY --from=frontend-builder /app/public /app/public
-EXPOSE 8090
+EXPOSE 80
 ENTRYPOINT ["/app/paperless-go"]
-CMD ["serve", "--http=0.0.0.0:8090"]
+CMD ["serve", "--http=0.0.0.0:80"]

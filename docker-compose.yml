@@ -6,10 +6,9 @@ services:
     env_file:
       - .env
     ports:
-      - "8090:8090"
+      - "8090:80"
     volumes:
       - app_data:/app/pb_data
-    command: ["serve", "--http=0.0.0.0:8090"]
 
 volumes:
   app_data:
