@@ -24,12 +24,15 @@ type MistralProvider struct {
 	client  *http.Client
 }
 
-func NewMistralProvider(apiKey, model, baseURL string) *MistralProvider {
+func NewMistralProvider(apiKey, model, baseURL string, timeout time.Duration) *MistralProvider {
+	if timeout <= 0 {
+		timeout = 40 * time.Second
+	}
 	return &MistralProvider{
 		apiKey:  apiKey,
 		model:   model,
 		baseURL: strings.TrimRight(baseURL, "/"),
-		client:  &http.Client{Timeout: 5 * time.Minute},
+		client:  &http.Client{Timeout: timeout},
 	}
 }
 

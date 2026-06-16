@@ -33,6 +33,7 @@ func ocrProviderConfig(cfg config.Config) ocr.ProviderConfig {
 		MistralAPIKey:      cfg.MistralAPIKey,
 		MistralModel:       cfg.MistralOCRModel,
 		MistralBaseURL:     cfg.MistralAPIBaseURL,
+		OCRTimeout:         cfg.OCRTimeout,
 	}
 }
 
@@ -86,7 +87,7 @@ func handleOCRTest(cfg config.Config) func(*core.RequestEvent) error {
 			return writeError(e, 400, err.Error())
 		}
 
-		ctx, cancel := context.WithTimeout(e.Request.Context(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(e.Request.Context(), cfg.OCRTimeout)
 		defer cancel()
 
 		start := time.Now()

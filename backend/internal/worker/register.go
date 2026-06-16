@@ -27,6 +27,7 @@ func Register(app core.App) {
 		MistralAPIKey:      cfg.MistralAPIKey,
 		MistralModel:       cfg.MistralOCRModel,
 		MistralBaseURL:     cfg.MistralAPIBaseURL,
+		OCRTimeout:         cfg.OCRTimeout,
 	})
 	if err != nil {
 		log.Fatalf("[worker] OCR provider: %v", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 )
 
 type Provider interface {
@@ -16,6 +17,7 @@ type ProviderConfig struct {
 	MistralAPIKey      string
 	MistralModel       string
 	MistralBaseURL     string
+	OCRTimeout         time.Duration
 }
 
 type ProviderInfo struct {
@@ -47,7 +49,7 @@ func NewProvider(name string, cfg ProviderConfig) (Provider, error) {
 			return nil, fmt.Errorf("MISTRAL_API_KEY is required when OCR_PROVIDER=mistral")
 		}
 		log.Printf("[ocr] using provider=mistral model=%s", cfg.MistralModel)
-		return NewMistralProvider(cfg.MistralAPIKey, cfg.MistralModel, cfg.MistralBaseURL), nil
+		return NewMistralProvider(cfg.MistralAPIKey, cfg.MistralModel, cfg.MistralBaseURL, cfg.OCRTimeout), nil
 	default:
 		return nil, fmt.Errorf("unsupported OCR provider %q (supported: google_vision, mistral)", name)
 	}

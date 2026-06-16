@@ -46,8 +46,8 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		return failJob(app, job, document, fmt.Errorf("mark document processing: %w", err))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.OpenAITimeout+30*time.Second)
-	defer cancel()
+	jobCtx, jobCancel := context.WithTimeout(context.Background(), cfg.WorkerTimeout)
+	defer jobCancel()
 
 	var ocrText string
 	var mimeType string
@@ -71,7 +71,9 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 		}
 
 		ocrStart := time.Now()
-		ocrText, err = ocrProvider.ExtractText(ctx, tmpPath, mimeType)
+		ocrCtx, ocrCancel := context.WithTimeout(jobCtx, cfg.OCRTimeout)
+		ocrText, err = ocrProvider.ExtractText(ocrCtx, tmpPath, mimeType)
+		ocrCancel()
 		if err != nil {
 			return failJob(app, job, document, fmt.Errorf("ocr: %w", err))
 		}
@@ -82,7 +84,9 @@ func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider oc
 	log.Printf("[worker] job=%s document=%s starting AI extraction provider=%s model=%s ocr_chars=%d",
 		job.Id, documentID, aiExtractor.Name(), aiExtractor.Model(), len(ocrText))
 	aiStart := time.Now()
-	metadata, err := aiExtractor.ExtractMetadata(ctx, ocrText)
+	aiCtx, aiCancel := context.WithTimeout(jobCtx, cfg.OpenAITimeout)
+	metadata, err := aiExtractor.ExtractMetadata(aiCtx, ocrText)
+	aiCancel()
 	if err != nil {
 		log.Printf("[worker] job=%s document=%s AI extraction failed duration=%s: %v",
 			job.Id, documentID, time.Since(aiStart).Round(time.Millisecond), err)
