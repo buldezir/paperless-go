@@ -102,7 +102,7 @@ func init() {
 				CollectionId: correspondents.Id,
 				MaxSelect:    1,
 			},
-			&core.EditorField{Name: "ocr_text"},
+			&core.TextField{Name: "ocr_text", Max: 500000},
 			&core.TextField{Name: "summary", Max: 5000},
 			&core.TextField{Name: "summary_original", Max: 5000},
 			&core.SelectField{
