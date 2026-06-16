@@ -22,7 +22,12 @@ type Processor struct {
 
 func Register(app core.App) {
 	cfg := config.Load()
-	ocrProvider, err := ocr.NewProvider(cfg.OCRProvider, cfg.OCRAPIKey)
+	ocrProvider, err := ocr.NewProvider(cfg.OCRProvider, ocr.ProviderConfig{
+		GoogleVisionAPIKey: cfg.GoogleVisionAPIKey,
+		MistralAPIKey:      cfg.MistralAPIKey,
+		MistralModel:       cfg.MistralOCRModel,
+		MistralBaseURL:     cfg.MistralAPIBaseURL,
+	})
 	if err != nil {
 		log.Fatalf("[worker] OCR provider: %v", err)
 	}

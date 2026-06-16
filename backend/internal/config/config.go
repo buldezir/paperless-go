@@ -8,8 +8,11 @@ import (
 )
 
 type Config struct {
-	OCRProvider         string
-	OCRAPIKey           string
+	OCRProvider              string
+	GoogleVisionAPIKey       string
+	MistralAPIKey            string
+	MistralOCRModel          string
+	MistralAPIBaseURL        string
 	ProcessingResultLanguage string
 	OpenAIAPIKey        string
 	OpenAIModel         string
@@ -28,8 +31,11 @@ func Load() Config {
 	openAIModel := getEnv("OPENAI_MODEL", "gpt-4o-mini")
 
 	return Config{
-		OCRProvider:         getEnv("OCR_PROVIDER", "google_vision"),
-		OCRAPIKey:           os.Getenv("OCR_API_KEY"),
+		OCRProvider:              getEnv("OCR_PROVIDER", "google_vision"),
+		GoogleVisionAPIKey:       os.Getenv("GOOGLE_VISION_API_KEY"),
+		MistralAPIKey:            os.Getenv("MISTRAL_API_KEY"),
+		MistralOCRModel:          getEnv("MISTRAL_OCR_MODEL", "mistral-ocr-latest"),
+		MistralAPIBaseURL:        getEnv("MISTRAL_API_BASE_URL", "https://api.mistral.ai/v1"),
 		ProcessingResultLanguage: strings.ToLower(strings.TrimSpace(os.Getenv("PROCESSING_RESULT_LANGUAGE"))),
 		OpenAIAPIKey:        os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:         openAIModel,

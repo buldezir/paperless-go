@@ -12,7 +12,7 @@ The API has been tested with the [swift-paperless](https://github.com/paulgessin
 
 - **Backend:** Go, [PocketBase as a framework](https://pocketbase.io/docs/use-as-framework/)
 - **Frontend:** React, TanStack Router, PocketBase JS SDK
-- **OCR:** Google Cloud Vision (requires `OCR_API_KEY`)
+- **OCR:** Google Cloud Vision (`google_vision`) or Mistral (`mistral`), selected via `OCR_PROVIDER`
 - **AI:** OpenAI-compatible chat completions via the official OpenAI Go SDK
 
 ## Project layout
@@ -27,7 +27,7 @@ docs/       Development guide
 
 ```bash
 cp .env.example .env
-# Edit .env and set OCR_API_KEY and OPENAI_API_KEY
+# Edit .env and set OCR provider keys and OPENAI_API_KEY
 docker compose up --build
 ```
 
@@ -41,7 +41,7 @@ See [docs/development.md](docs/development.md) for the full list.
 
 Minimum for local dev:
 
-- Set `OCR_API_KEY` for Google Cloud Vision OCR
+- Set `GOOGLE_VISION_API_KEY` (for `OCR_PROVIDER=google_vision`) or `MISTRAL_API_KEY` (for `OCR_PROVIDER=mistral`)
 - Set `OPENAI_API_KEY` to use AI extraction
 
 ## Features

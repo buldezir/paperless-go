@@ -46,8 +46,11 @@ All variables live in `.env` at the project root (see `.env.example`).
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `OCR_PROVIDER` | `google_vision` | OCR provider name (`google_vision`) |
-| `OCR_API_KEY` | empty | Google Cloud Vision API key (required) |
+| `OCR_PROVIDER` | `google_vision` | OCR provider (`google_vision`, `mistral`) |
+| `GOOGLE_VISION_API_KEY` | empty | Google Cloud Vision API key (required when `OCR_PROVIDER=google_vision`) |
+| `MISTRAL_API_KEY` | empty | Mistral API key (required when `OCR_PROVIDER=mistral`) |
+| `MISTRAL_OCR_MODEL` | `mistral-ocr-latest` | Mistral OCR model |
+| `MISTRAL_API_BASE_URL` | `https://api.mistral.ai/v1` | Mistral API base URL |
 | `PROCESSING_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, `purpose`, and `document_type` are stored in this language; originals go in `*_original` fields. Tags and document types are created in both languages when a translation is available. |
 | `OPENAI_API_KEY` | empty | OpenAI-compatible API key |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Model ID for metadata extraction |
@@ -87,15 +90,37 @@ Without an API key, AI extraction and document chat return a configuration error
 
 ## OCR setup
 
+Set `OCR_PROVIDER` to choose the provider. Each provider requires its own API key.
+
+### Google Cloud Vision
+
 Uses the official [Go client library](https://docs.cloud.google.com/vision/docs/detect-labels-image-client-libraries).
 
 ```env
 OCR_PROVIDER=google_vision
-OCR_API_KEY=your-google-api-key
+GOOGLE_VISION_API_KEY=your-google-api-key
 ```
 
 - **Images** — `BatchAnnotateImages` with `DOCUMENT_TEXT_DETECTION` via `images:annotate`
 - **PDFs** — `BatchAnnotateFiles` via `files:annotate` (base64 upload, no Cloud Storage). Pages are processed in batches of up to 5 per request.
+
+See [docs/google_vision.md](google_vision.md) for obtaining a Google API key.
+
+### Mistral OCR
+
+Uses the [Mistral Document OCR API](https://docs.mistral.ai/en/studio-api/document-processing/basic_ocr). Local files are sent as base64 data URLs (up to 10 MB).
+
+```env
+OCR_PROVIDER=mistral
+MISTRAL_API_KEY=your-mistral-api-key
+# optional:
+# MISTRAL_OCR_MODEL=mistral-ocr-latest
+# MISTRAL_API_BASE_URL=https://api.mistral.ai/v1
+```
+
+- **PDFs and office documents** — `document_url` with a base64 data URL
+- **Images** — `image_url` with a base64 data URL
+- **Output** — page markdown joined into plain text
 
 ## Useful commands
 
@@ -131,6 +156,6 @@ API versions 9 and 10 are accepted via the `Accept` header (`application/json; v
 ## Troubleshooting
 
 - **Upload succeeds but stays pending:** ensure the backend server is running; the worker starts with `serve`.
-- **OCR fails:** verify `OCR_API_KEY` is set and Vision API is enabled for your Google Cloud project.
+- **OCR fails:** verify the API key for your `OCR_PROVIDER` is set (`GOOGLE_VISION_API_KEY` or `MISTRAL_API_KEY`). For Google Vision, ensure the Vision API is enabled for your project.
 - **AI extraction fails:** verify `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and model name. Check the processing job error on the document detail page.
 - **Auth errors in frontend:** delete PocketBase data dir (`backend/pb_data`) and restart to recreate collections, then reload the app.

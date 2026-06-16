@@ -11,15 +11,28 @@ type Provider interface {
 	ExtractText(ctx context.Context, filePath string, mimeType string) (string, error)
 }
 
-func NewProvider(name, apiKey string) (Provider, error) {
+type ProviderConfig struct {
+	GoogleVisionAPIKey string
+	MistralAPIKey      string
+	MistralModel       string
+	MistralBaseURL     string
+}
+
+func NewProvider(name string, cfg ProviderConfig) (Provider, error) {
 	switch name {
 	case "google_vision":
-		if apiKey == "" {
-			return nil, fmt.Errorf("OCR_API_KEY is required when OCR_PROVIDER=google_vision")
+		if cfg.GoogleVisionAPIKey == "" {
+			return nil, fmt.Errorf("GOOGLE_VISION_API_KEY is required when OCR_PROVIDER=google_vision")
 		}
 		log.Printf("[ocr] using provider=google_vision")
-		return NewGoogleVisionProvider(apiKey), nil
+		return NewGoogleVisionProvider(cfg.GoogleVisionAPIKey), nil
+	case "mistral":
+		if cfg.MistralAPIKey == "" {
+			return nil, fmt.Errorf("MISTRAL_API_KEY is required when OCR_PROVIDER=mistral")
+		}
+		log.Printf("[ocr] using provider=mistral model=%s", cfg.MistralModel)
+		return NewMistralProvider(cfg.MistralAPIKey, cfg.MistralModel, cfg.MistralBaseURL), nil
 	default:
-		return nil, fmt.Errorf("unsupported OCR provider %q (supported: google_vision)", name)
+		return nil, fmt.Errorf("unsupported OCR provider %q (supported: google_vision, mistral)", name)
 	}
 }
