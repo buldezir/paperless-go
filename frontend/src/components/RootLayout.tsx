@@ -105,6 +105,13 @@ export function RootLayout() {
               >
                 Upload
               </Link>
+              <Link
+                to="/ocr-test"
+                className={navLinkClass}
+                activeProps={{ className: `${navLinkClass} ${navLinkActiveClass}` }}
+              >
+                OCR test
+              </Link>
               <a
                 href={pbAdminUrl}
                 target="_blank"

@@ -76,6 +76,18 @@ export type ChatMessage = {
   content: string
 }
 
+export type OCRProviderInfo = {
+  id: string
+  name: string
+}
+
+export type OCRTestResult = {
+  provider: string
+  text: string
+  char_count: number
+  duration: string
+}
+
 export function fileUrl(record: DocumentRecord, filename?: string) {
   return pb.files.getURL(record, filename ?? record.file)
 }
@@ -112,6 +124,44 @@ export async function chatWithDocument(documentId: string, messages: ChatMessage
     throw new Error('AI response was empty')
   }
   return data.message
+}
+
+export async function listOCRProviders() {
+  await ensureAuth()
+
+  const response = await fetch(`${pbUrl}/api/app/ocr/providers`, {
+    headers: {
+      Authorization: pb.authStore.token,
+    },
+  })
+
+  const data = (await response.json()) as { providers?: OCRProviderInfo[]; detail?: string }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Failed to load OCR providers')
+  }
+  return data.providers ?? []
+}
+
+export async function testOCR(file: File, provider: string) {
+  await ensureAuth()
+
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('provider', provider)
+
+  const response = await fetch(`${pbUrl}/api/app/ocr/test`, {
+    method: 'POST',
+    headers: {
+      Authorization: pb.authStore.token,
+    },
+    body: formData,
+  })
+
+  const data = (await response.json()) as OCRTestResult & { detail?: string }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'OCR test failed')
+  }
+  return data
 }
 
 export class AuthRequiredError extends Error {

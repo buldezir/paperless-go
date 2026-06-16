@@ -18,6 +18,22 @@ type ProviderConfig struct {
 	MistralBaseURL     string
 }
 
+type ProviderInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func AvailableProviders(cfg ProviderConfig) []ProviderInfo {
+	providers := make([]ProviderInfo, 0, 2)
+	if cfg.GoogleVisionAPIKey != "" {
+		providers = append(providers, ProviderInfo{ID: "google_vision", Name: "Google Cloud Vision"})
+	}
+	if cfg.MistralAPIKey != "" {
+		providers = append(providers, ProviderInfo{ID: "mistral", Name: "Mistral OCR"})
+	}
+	return providers
+}
+
 func NewProvider(name string, cfg ProviderConfig) (Provider, error) {
 	switch name {
 	case "google_vision":

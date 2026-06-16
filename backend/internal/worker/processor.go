@@ -192,7 +192,7 @@ func readDocumentToTempFile(app core.App, document *core.Record) (tmpPath, mimeT
 		return "", "", func() {}, err
 	}
 
-	return tmpPath, guessMimeType(fileName), cleanup, nil
+	return tmpPath, ocr.GuessMimeType(fileName), cleanup, nil
 }
 
 func attachPDFPreview(app core.App, document *core.Record, filePath, mimeType string) error {
@@ -602,23 +602,6 @@ func failJob(app core.App, job *core.Record, document *core.Record, err error) e
 	}
 
 	return err
-}
-
-func guessMimeType(fileName string) string {
-	switch strings.ToLower(filepath.Ext(fileName)) {
-	case ".pdf":
-		return "application/pdf"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".png":
-		return "image/png"
-	case ".webp":
-		return "image/webp"
-	case ".txt":
-		return "text/plain"
-	default:
-		return "application/octet-stream"
-	}
 }
 
 func truncateError(msg string, max int) string {

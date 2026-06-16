@@ -21,6 +21,8 @@ func Register(app core.App) {
 		Func: func(e *core.ServeEvent) error {
 			g := e.Router.Group("/api/app")
 			g.POST("/documents/{documentId}/chat", bindAuth(handleDocumentChat(app, chatter)))
+			g.GET("/ocr/providers", bindAuth(handleOCRProviders(cfg)))
+			g.POST("/ocr/test", bindAuth(handleOCRTest(cfg)))
 			return e.Next()
 		},
 	})
