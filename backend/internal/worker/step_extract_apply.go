@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -43,8 +43,11 @@ func (s *ExtractMetadataStep) Run(ctx context.Context, state *StepState) error {
 	}
 	state.OCRText = ocrText
 
-	log.Printf("[worker] job=%s document=%s starting AI extraction provider=%s model=%s ocr_chars=%d",
-		state.Job.Id, state.Document.Id, s.Extractor.Name(), s.Extractor.Model(), len(ocrText))
+	state.Logger.Info("starting AI extraction",
+		"provider", s.Extractor.Name(),
+		"model", s.Extractor.Model(),
+		"ocr_chars", len(ocrText),
+	)
 
 	aiStart := time.Now()
 	aiCtx, cancel := context.WithTimeout(ctx, state.Cfg.OpenAITimeout)
@@ -52,14 +55,20 @@ func (s *ExtractMetadataStep) Run(ctx context.Context, state *StepState) error {
 
 	metadata, err := s.Extractor.ExtractMetadata(aiCtx, ocrText)
 	if err != nil {
-		log.Printf("[worker] job=%s document=%s AI extraction failed duration=%s: %v",
-			state.Job.Id, state.Document.Id, time.Since(aiStart).Round(time.Millisecond), err)
+		state.Logger.Error("AI extraction failed",
+			"duration", time.Since(aiStart).Round(time.Millisecond),
+			slog.Any("error", err),
+		)
 		return fmt.Errorf("ai extraction: %w", err)
 	}
 
-	log.Printf("[worker] job=%s document=%s AI extraction complete duration=%s confidence=%.2f title=%q type=%q tags=%d",
-		state.Job.Id, state.Document.Id, time.Since(aiStart).Round(time.Millisecond), metadata.Confidence,
-		truncateForLog(metadata.Title, 80), truncateForLog(metadata.DocumentType, 40), len(metadata.Tags))
+	state.Logger.Info("AI extraction complete",
+		"duration", time.Since(aiStart).Round(time.Millisecond),
+		"confidence", metadata.Confidence,
+		"title", truncateForLog(metadata.Title, 80),
+		"type", truncateForLog(metadata.DocumentType, 40),
+		"tags", len(metadata.Tags),
+	)
 
 	state.Metadata = metadata
 	saveMetadataJSON(state.Job, metadata)
@@ -96,14 +105,16 @@ func (s *ApplyMetadataStep) Run(ctx context.Context, state *StepState) error {
 	if err := applyDocumentType(state.App, state.Document, metadata, state.Cfg.ProcessingResultLanguage); err != nil {
 		return fmt.Errorf("document type: %w", err)
 	}
-	log.Printf("[worker] job=%s document=%s document_type=%s",
-		state.Job.Id, state.Document.Id, truncateForLog(state.Document.GetString("document_type"), 40))
+	state.Logger.Info("document type applied",
+		"document_type", truncateForLog(state.Document.GetString("document_type"), 40),
+	)
 
 	if err := applyCorrespondent(state.App, state.Document, metadata, state.Cfg.ProcessingResultLanguage); err != nil {
 		return fmt.Errorf("correspondent: %w", err)
 	}
-	log.Printf("[worker] job=%s document=%s correspondent=%s",
-		state.Job.Id, state.Document.Id, truncateForLog(state.Document.GetString("correspondent"), 40))
+	state.Logger.Info("correspondent applied",
+		"correspondent", truncateForLog(state.Document.GetString("correspondent"), 40),
+	)
 
 	state.Document.Set("confidence", metadata.Confidence)
 	state.Document.Set("people_or_organizations", metadata.PeopleOrOrganizations)
@@ -118,7 +129,7 @@ func (s *ApplyMetadataStep) Run(ctx context.Context, state *StepState) error {
 		return fmt.Errorf("tags: %w", err)
 	}
 	state.Document.Set("tags", tagIDs)
-	log.Printf("[worker] job=%s document=%s applied %d tags", state.Job.Id, state.Document.Id, len(tagIDs))
+	state.Logger.Info("tags applied", "count", len(tagIDs))
 
 	status := models.DocStatusCompleted
 	jobStatus := models.JobStatusCompleted

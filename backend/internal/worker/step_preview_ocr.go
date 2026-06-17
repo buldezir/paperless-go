@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"paperless-go/backend/internal/models"
@@ -47,8 +46,7 @@ func (s *PreviewStep) Run(ctx context.Context, state *StepState) error {
 		return fmt.Errorf("save preview: %w", err)
 	}
 
-	log.Printf("[worker] job=%s document=%s preview saved file=%q",
-		state.Job.Id, state.Document.Id, previewFile.Name)
+	state.Logger.Info("preview saved", "file", previewFile.Name)
 	return nil
 }
 
@@ -88,8 +86,11 @@ func (s *OCRStep) Run(ctx context.Context, state *StepState) error {
 		return fmt.Errorf("save ocr text: %w", err)
 	}
 
-	log.Printf("[worker] job=%s document=%s OCR complete provider=%s mime=%s chars=%d",
-		state.Job.Id, state.Document.Id, s.Provider.Name(), state.MimeType, len(ocrText))
+	state.Logger.Info("OCR complete",
+		"provider", s.Provider.Name(),
+		"mime", state.MimeType,
+		"chars", len(ocrText),
+	)
 	return nil
 }
 

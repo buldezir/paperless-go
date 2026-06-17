@@ -9,6 +9,12 @@ import (
 	"paperless-go/backend/internal/models"
 )
 
+const pbTimeLayout = "2006-01-02 15:04:05.000Z"
+
+func nowTimestamp() string {
+	return time.Now().UTC().Format(pbTimeLayout)
+}
+
 func parseSteps(job *core.Record) ([]string, error) {
 	raw := job.Get("steps")
 	if raw == nil {
@@ -132,7 +138,7 @@ func nextRunnableIndex(runs []models.StepRun) int {
 }
 
 func markStepRunning(run *models.StepRun) {
-	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	now := nowTimestamp()
 	run.Status = models.StepStatusRunning
 	run.Attempts++
 	run.StartedAt = now
@@ -156,7 +162,7 @@ func setStepRunExecutionDetails(run *models.StepRun, state *StepState) {
 }
 
 func markStepCompleted(run *models.StepRun, skipped bool) {
-	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	now := nowTimestamp()
 	if skipped {
 		run.Status = models.StepStatusSkipped
 	} else {
@@ -167,7 +173,7 @@ func markStepCompleted(run *models.StepRun, skipped bool) {
 }
 
 func markStepFailed(run *models.StepRun, err error) {
-	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	now := nowTimestamp()
 	run.Status = models.StepStatusFailed
 	run.FinishedAt = now
 	run.Error = truncateError(err.Error(), 1900)

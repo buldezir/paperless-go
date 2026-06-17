@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/pocketbase/pocketbase/core"
 	"paperless-go/backend/internal/ai"
@@ -23,6 +24,7 @@ type StepState struct {
 	Document *core.Record
 	OCR      ocr.Provider
 	AI       ai.Extractor
+	Logger   *slog.Logger
 
 	TmpPath  string
 	MimeType string

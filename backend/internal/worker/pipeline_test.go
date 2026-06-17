@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -70,10 +71,10 @@ func TestInitStepRuns(t *testing.T) {
 
 func TestStepsInclude(t *testing.T) {
 	steps := []string{models.StepOCR, models.StepExtractMetadata}
-	if !stepsInclude(steps, models.StepOCR) {
+	if !slices.Contains(steps, models.StepOCR) {
 		t.Fatal("expected ocr to be included")
 	}
-	if stepsInclude(steps, models.StepPreview) {
+	if slices.Contains(steps, models.StepPreview) {
 		t.Fatal("expected preview to be excluded")
 	}
 }

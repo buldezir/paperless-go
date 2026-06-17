@@ -3,7 +3,8 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -33,6 +34,7 @@ func NewPipelineRunner(app core.App, cfg config.Config, ocrProvider ocr.Provider
 
 func (r *PipelineRunner) Run(ctx context.Context, jobID string) error {
 	jobStart := time.Now()
+	logger := r.App.Logger().With("job", jobID)
 
 	job, err := r.App.FindRecordById("processing_jobs", jobID)
 	if err != nil {
@@ -56,7 +58,8 @@ func (r *PipelineRunner) Run(ctx context.Context, jobID string) error {
 		return failJob(r.App, job, nil, fmt.Errorf("load document: %w", err))
 	}
 
-	log.Printf("[worker] job=%s document=%s steps=%v starting", job.Id, documentID, steps)
+	logger = logger.With("document", documentID)
+	logger.Info("starting pipeline", "steps", steps)
 
 	runs, err := parseStepRuns(job)
 	if err != nil {
@@ -79,6 +82,7 @@ func (r *PipelineRunner) Run(ctx context.Context, jobID string) error {
 		AI:         r.AI,
 		Metadata:   metadata,
 		ForceSteps: parseForceSteps(job),
+		Logger:     logger,
 	}
 	defer func() {
 		if state.Cleanup != nil {
@@ -119,12 +123,11 @@ func (r *PipelineRunner) Run(ctx context.Context, jobID string) error {
 			if err := r.App.Save(job); err != nil {
 				return err
 			}
-			log.Printf("[worker] job=%s document=%s step=%s skipped", job.Id, documentID, stepName)
+			logger.Info("step skipped", "step", stepName)
 			continue
 		}
 
-		log.Printf("[worker] job=%s document=%s step=%s attempt=%d running",
-			job.Id, documentID, stepName, runs[idx].Attempts)
+		logger.Info("step running", "step", stepName, "attempt", runs[idx].Attempts)
 
 		if err := step.Run(jobCtx, state); err != nil {
 			return r.handleStepFailure(job, document, runs, idx, err)
@@ -135,21 +138,23 @@ func (r *PipelineRunner) Run(ctx context.Context, jobID string) error {
 		if err := r.App.Save(job); err != nil {
 			return err
 		}
-		log.Printf("[worker] job=%s document=%s step=%s completed", job.Id, documentID, stepName)
+		logger.Info("step completed", "step", stepName)
 	}
 
 	if job.GetString("status") == models.JobStatusRunning {
 		job.Set("status", models.JobStatusCompleted)
 	}
-	job.Set("finished_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
+	job.Set("finished_at", nowTimestamp())
 	job.Set("current_step", "")
 
 	if err := finalizeDocumentWithoutApply(r.App, document, steps); err != nil {
 		return err
 	}
 
-	log.Printf("[worker] job=%s document=%s finished status=%s duration=%s",
-		job.Id, documentID, job.GetString("status"), time.Since(jobStart).Round(time.Millisecond))
+	logger.Info("pipeline finished",
+		"status", job.GetString("status"),
+		"duration", time.Since(jobStart).Round(time.Millisecond),
+	)
 	return r.App.Save(job)
 }
 
@@ -167,8 +172,13 @@ func (r *PipelineRunner) handleStepFailure(job, document *core.Record, runs []mo
 	job.Set("current_step", runs[idx].Name)
 
 	if runs[idx].Attempts < r.Cfg.WorkerMaxRetries {
-		log.Printf("[worker] job=%s document=%s step=%s scheduling retry %d/%d",
-			job.Id, document.Id, runs[idx].Name, runs[idx].Attempts, r.Cfg.WorkerMaxRetries)
+		r.App.Logger().Warn("scheduling step retry",
+			"job", job.Id,
+			"document", document.Id,
+			"step", runs[idx].Name,
+			"attempt", runs[idx].Attempts,
+			"max_retries", r.Cfg.WorkerMaxRetries,
+		)
 		job.Set("status", models.JobStatusPending)
 		document.Set("processing_status", models.DocStatusPending)
 		if saveErr := r.App.Save(document); saveErr != nil {
@@ -178,4 +188,41 @@ func (r *PipelineRunner) handleStepFailure(job, document *core.Record, runs []mo
 	}
 
 	return failJob(r.App, job, document, err)
+}
+
+func failJob(app core.App, job *core.Record, document *core.Record, err error) error {
+	documentID := ""
+	if document != nil {
+		documentID = document.Id
+	} else {
+		documentID = job.GetString("document")
+	}
+	app.Logger().Error("job failed",
+		"job", job.Id,
+		"document", documentID,
+		slog.Any("error", err),
+	)
+
+	job.Set("status", models.JobStatusFailed)
+	job.Set("finished_at", nowTimestamp())
+	if saveErr := app.Save(job); saveErr != nil {
+		return saveErr
+	}
+
+	if document != nil {
+		document.Set("processing_status", models.DocStatusFailed)
+		if saveErr := app.Save(document); saveErr != nil {
+			return saveErr
+		}
+	}
+
+	return err
+}
+
+func finalizeDocumentWithoutApply(app core.App, document *core.Record, steps []string) error {
+	if slices.Contains(steps, models.StepApplyMetadata) {
+		return nil
+	}
+	document.Set("processing_status", models.DocStatusCompleted)
+	return app.Save(document)
 }

@@ -1,475 +1,259 @@
 package worker
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
+	"log/slog"
+	"sync"
 
+	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase/core"
+	"paperless-go/backend/internal/ai"
+	"paperless-go/backend/internal/config"
 	"paperless-go/backend/internal/models"
 	"paperless-go/backend/internal/ocr"
 )
 
-func readDocumentToTempFile(app core.App, document *core.Record) (tmpPath, mimeType string, cleanup func(), err error) {
-	fileName := document.GetString("file")
-	if fileName == "" {
-		return "", "", func() {}, fmt.Errorf("document has no file")
-	}
-
-	fsys, err := app.NewFilesystem()
-	if err != nil {
-		return "", "", func() {}, err
-	}
-	defer fsys.Close()
-
-	fileKey := document.BaseFilesPath() + "/" + fileName
-	reader, err := fsys.GetReader(fileKey)
-	if err != nil {
-		return "", "", func() {}, fmt.Errorf("open uploaded file: %w", err)
-	}
-	defer reader.Close()
-
-	tmpFile, err := os.CreateTemp("", "paperless-doc-*"+filepath.Ext(fileName))
-	if err != nil {
-		return "", "", func() {}, err
-	}
-	tmpPath = tmpFile.Name()
-	cleanup = func() { os.Remove(tmpPath) }
-
-	if _, err := io.Copy(tmpFile, reader); err != nil {
-		tmpFile.Close()
-		cleanup()
-		return "", "", func() {}, err
-	}
-	if err := tmpFile.Close(); err != nil {
-		cleanup()
-		return "", "", func() {}, err
-	}
-
-	return tmpPath, ocr.GuessMimeType(fileName), cleanup, nil
+type Processor struct {
+	app        core.App
+	cfg        config.Config
+	ocr        ocr.Provider
+	ai         ai.Extractor
+	processing sync.Mutex
 }
 
-func applyExtractedMetadata(document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) {
-	if resultLanguage != "" {
-		document.Set("title_original", metadata.Title)
-		document.Set("summary_original", metadata.Summary)
-		document.Set("purpose_original", metadata.Purpose)
-		document.Set("title", firstNonEmpty(metadata.TitleTranslated, metadata.Title))
-		document.Set("summary", firstNonEmpty(metadata.SummaryTranslated, metadata.Summary))
-		document.Set("purpose", firstNonEmpty(metadata.PurposeTranslated, metadata.Purpose))
-		return
+func Register(app core.App) {
+	cfg := config.Load()
+	ocrProvider, err := ocr.NewProvider(cfg.OCRProvider, ocr.ProviderConfig{
+		GoogleVisionAPIKey: cfg.GoogleVisionAPIKey,
+		MistralAPIKey:      cfg.MistralAPIKey,
+		MistralModel:       cfg.MistralOCRModel,
+		MistralBaseURL:     cfg.MistralAPIBaseURL,
+		OCRTimeout:         cfg.OCRTimeout,
+	})
+	if err != nil {
+		log.Fatalf("[worker] OCR provider: %v", err)
 	}
+	aiExtractor := ai.NewExtractor(
+		cfg.OpenAIAPIKey,
+		cfg.OpenAIModel,
+		cfg.OpenAIBaseURL,
+		cfg.ExtractionPromptVer,
+		cfg.ProcessingResultLanguage,
+		cfg.OpenAITimeout,
+	)
 
-	document.Set("title", metadata.Title)
-	document.Set("summary", metadata.Summary)
-	document.Set("purpose", metadata.Purpose)
-}
+	p := &Processor{
+		app: app,
+		cfg: cfg,
+		ocr: ocrProvider,
+		ai:  aiExtractor,
+	}
+	p.registerHooks()
 
-func mergeTagNames(original, translated []string) []string {
-	seen := make(map[string]struct{}, len(original)+len(translated))
-	names := make([]string, 0, len(original)+len(translated))
-
-	for _, group := range [][]string{original, translated} {
-		for _, rawName := range group {
-			name := strings.TrimSpace(rawName)
-			if name == "" {
-				continue
-			}
-			key := strings.ToLower(name)
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			names = append(names, name)
+	app.Cron().MustAdd("process_pending_jobs", cfg.WorkerCronExpr, func() {
+		if err := p.processNextPending(); err != nil {
+			app.Logger().Error("cron error", slog.Any("error", err))
 		}
-	}
+	})
 
-	return names
+	app.Logger().Info("worker registered",
+		"cron", cfg.WorkerCronExpr,
+		"ocr", ocrProvider.Name(),
+		"ai", aiExtractor.Name(),
+		"model", aiExtractor.Model(),
+	)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
+func (p *Processor) registerHooks() {
+	p.app.OnRecordCreate("documents").BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
+		if record.GetString("processing_status") == "" {
+			record.Set("processing_status", models.DocStatusPending)
 		}
-	}
-	return ""
-}
-
-func documentTypeNames(metadata *models.ExtractedMetadata, resultLanguage string) (displayName, originalName string) {
-	originalName = strings.TrimSpace(metadata.DocumentType)
-	if originalName == "" {
-		return "", ""
-	}
-	if resultLanguage == "" {
-		return originalName, originalName
-	}
-
-	translated := strings.TrimSpace(metadata.DocumentTypeTranslated)
-	displayName = firstNonEmpty(translated, originalName)
-	return displayName, originalName
-}
-
-func correspondentNames(metadata *models.ExtractedMetadata, resultLanguage string) (displayName, originalName string) {
-	originalName = strings.TrimSpace(metadata.Correspondent)
-	if originalName == "" {
-		for _, raw := range metadata.PeopleOrOrganizations {
-			if name := strings.TrimSpace(raw); name != "" {
-				originalName = name
-				break
-			}
+		if err := e.Next(); err != nil {
+			return err
 		}
-	}
-	if originalName == "" {
-		return "", ""
-	}
-	if resultLanguage == "" {
-		return originalName, originalName
-	}
 
-	translated := strings.TrimSpace(metadata.CorrespondentTranslated)
-	displayName = firstNonEmpty(translated, originalName)
-	return displayName, originalName
-}
-
-func applyCorrespondent(app core.App, document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) error {
-	displayName, originalName := correspondentNames(metadata, resultLanguage)
-	if displayName == "" {
-		document.Set("correspondent", "")
-		return nil
-	}
-
-	correspondentID, err := ensureCorrespondent(app, displayName, originalName)
-	if err != nil {
+		_, err := createProcessingJob(e.App, record.Id, models.FullPipelineSteps, nil)
 		return err
-	}
-	document.Set("correspondent", correspondentID)
-	return nil
-}
+	})
 
-func ensureCorrespondent(app core.App, displayName, originalName string) (string, error) {
-	displayName = strings.TrimSpace(displayName)
-	originalName = strings.TrimSpace(originalName)
-	if displayName == "" {
-		return "", nil
-	}
-	if originalName == "" {
-		originalName = displayName
-	}
-
-	collection, err := app.FindCollectionByNameOrId("correspondents")
-	if err != nil {
-		return "", err
-	}
-
-	if id, err := findCorrespondentByOriginal(app, originalName); err != nil {
-		return "", err
-	} else if id != "" {
-		return updateCorrespondentNames(app, id, displayName, originalName)
-	}
-
-	if id, err := findCorrespondentID(app, displayName); err != nil {
-		return "", err
-	} else if id != "" {
-		return updateCorrespondentNames(app, id, displayName, originalName)
-	}
-
-	record := core.NewRecord(collection)
-	record.Set("name", displayName)
-	record.Set("name_original", originalName)
-	if err := app.Save(record); err != nil {
-		return "", err
-	}
-	return record.Id, nil
-}
-
-func updateCorrespondentNames(app core.App, id, displayName, originalName string) (string, error) {
-	record, err := app.FindRecordById("correspondents", id)
-	if err != nil {
-		return "", err
-	}
-
-	changed := false
-	if name := strings.TrimSpace(record.GetString("name")); name != displayName {
-		record.Set("name", displayName)
-		changed = true
-	}
-	if original := strings.TrimSpace(record.GetString("name_original")); original == "" || original != originalName {
-		record.Set("name_original", originalName)
-		changed = true
-	}
-	if changed {
-		if err := app.Save(record); err != nil {
-			return "", err
+	p.app.OnRecordCreate("processing_jobs").BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
+		if record.GetString("task_id") == "" {
+			record.Set("task_id", uuid.New().String())
 		}
-	}
-	return record.Id, nil
-}
-
-func findCorrespondentByOriginal(app core.App, originalName string) (string, error) {
-	originalName = strings.TrimSpace(originalName)
-	if originalName == "" {
-		return "", nil
-	}
-
-	existing, err := app.FindRecordsByFilter(
-		"correspondents",
-		"name_original = {:name}",
-		"",
-		1,
-		0,
-		map[string]any{"name": originalName},
-	)
-	if err != nil {
-		return "", err
-	}
-	if len(existing) == 0 {
-		return "", nil
-	}
-	return existing[0].Id, nil
-}
-
-func findCorrespondentID(app core.App, name string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", nil
-	}
-
-	existing, err := app.FindRecordsByFilter(
-		"correspondents",
-		"name = {:name}",
-		"",
-		1,
-		0,
-		map[string]any{"name": name},
-	)
-	if err != nil {
-		return "", err
-	}
-	if len(existing) == 0 {
-		return "", nil
-	}
-	return existing[0].Id, nil
-}
-
-func applyDocumentType(app core.App, document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) error {
-	displayName, originalName := documentTypeNames(metadata, resultLanguage)
-	if displayName == "" {
-		document.Set("document_type", "")
-		return nil
-	}
-
-	typeID, err := ensureDocumentType(app, displayName, originalName)
-	if err != nil {
-		return err
-	}
-	document.Set("document_type", typeID)
-	return nil
-}
-
-func ensureDocumentType(app core.App, displayName, originalName string) (string, error) {
-	displayName = strings.TrimSpace(displayName)
-	originalName = strings.TrimSpace(originalName)
-	if displayName == "" {
-		return "", nil
-	}
-	if originalName == "" {
-		originalName = displayName
-	}
-
-	collection, err := app.FindCollectionByNameOrId("document_types")
-	if err != nil {
-		return "", err
-	}
-
-	if id, err := findDocumentTypeByOriginal(app, originalName); err != nil {
-		return "", err
-	} else if id != "" {
-		return updateDocumentTypeNames(app, id, displayName, originalName)
-	}
-
-	if id, err := findDocumentTypeID(app, displayName); err != nil {
-		return "", err
-	} else if id != "" {
-		return updateDocumentTypeNames(app, id, displayName, originalName)
-	}
-
-	record := core.NewRecord(collection)
-	record.Set("name", displayName)
-	record.Set("name_original", originalName)
-	if err := app.Save(record); err != nil {
-		return "", err
-	}
-	return record.Id, nil
-}
-
-func updateDocumentTypeNames(app core.App, id, displayName, originalName string) (string, error) {
-	record, err := app.FindRecordById("document_types", id)
-	if err != nil {
-		return "", err
-	}
-
-	changed := false
-	if name := strings.TrimSpace(record.GetString("name")); name != displayName {
-		record.Set("name", displayName)
-		changed = true
-	}
-	if original := strings.TrimSpace(record.GetString("name_original")); original == "" || original != originalName {
-		record.Set("name_original", originalName)
-		changed = true
-	}
-	if changed {
-		if err := app.Save(record); err != nil {
-			return "", err
+		steps, err := parseSteps(record)
+		if err != nil {
+			return err
 		}
-	}
-	return record.Id, nil
+		if len(steps) == 0 {
+			record.Set("steps", models.FullPipelineSteps)
+		}
+		return e.Next()
+	})
+
+	p.app.OnRecordDelete("documents").BindFunc(func(e *core.RecordEvent) error {
+		jobs, err := e.App.FindRecordsByFilter(
+			"processing_jobs",
+			"document = {:docId}",
+			"-created",
+			100,
+			0,
+			map[string]any{"docId": e.Record.Id},
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, job := range jobs {
+			if err := e.App.Delete(job); err != nil {
+				return err
+			}
+		}
+
+		return e.Next()
+	})
+
+	p.app.OnRecordAfterCreateSuccess("processing_jobs").BindFunc(func(e *core.RecordEvent) error {
+		if e.Record.GetString("status") == models.JobStatusPending {
+			go p.dispatch(e.Record.Id)
+		}
+		return e.Next()
+	})
+
+	p.app.OnRecordAfterUpdateSuccess("processing_jobs").BindFunc(func(e *core.RecordEvent) error {
+		if e.Record.GetString("status") == models.JobStatusPending {
+			go p.dispatch(e.Record.Id)
+		}
+		return e.Next()
+	})
 }
 
-func findDocumentTypeByOriginal(app core.App, originalName string) (string, error) {
-	originalName = strings.TrimSpace(originalName)
-	if originalName == "" {
-		return "", nil
-	}
-
-	existing, err := app.FindRecordsByFilter(
-		"document_types",
-		"name_original = {:name}",
-		"",
-		1,
-		0,
-		map[string]any{"name": originalName},
-	)
-	if err != nil {
-		return "", err
-	}
-	if len(existing) == 0 {
-		return "", nil
-	}
-	return existing[0].Id, nil
-}
-
-func findDocumentTypeID(app core.App, name string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", nil
-	}
-
-	existing, err := app.FindRecordsByFilter(
-		"document_types",
-		"name = {:name}",
-		"",
-		1,
-		0,
-		map[string]any{"name": name},
-	)
-	if err != nil {
-		return "", err
-	}
-	if len(existing) == 0 {
-		return "", nil
-	}
-	return existing[0].Id, nil
-}
-
-func ensureTags(app core.App, names []string) ([]string, error) {
-	tagIDs := make([]string, 0, len(names))
-	tagsCollection, err := app.FindCollectionByNameOrId("tags")
+func createProcessingJob(app core.App, documentID string, steps []string, forceSteps []string) (*core.Record, error) {
+	jobsCollection, err := app.FindCollectionByNameOrId("processing_jobs")
 	if err != nil {
 		return nil, err
 	}
 
-	for _, rawName := range names {
-		name := strings.TrimSpace(rawName)
-		if name == "" {
-			continue
-		}
-
-		existing, err := app.FindRecordsByFilter(
-			"tags",
-			"name = {:name}",
-			"",
-			1,
-			0,
-			map[string]any{"name": name},
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(existing) > 0 {
-			tagIDs = append(tagIDs, existing[0].Id)
-			continue
-		}
-
-		tag := core.NewRecord(tagsCollection)
-		tag.Set("name", name)
-		if err := app.Save(tag); err != nil {
-			return nil, err
-		}
-		tagIDs = append(tagIDs, tag.Id)
+	job := core.NewRecord(jobsCollection)
+	job.Set("document", documentID)
+	job.Set("status", models.JobStatusPending)
+	job.Set("steps", steps)
+	if len(forceSteps) > 0 {
+		job.Set("force_steps", forceSteps)
 	}
 
-	return tagIDs, nil
+	if err := app.Save(job); err != nil {
+		return nil, err
+	}
+
+	app.Logger().Info("created job",
+		"job", job.Id,
+		"document", documentID,
+		"steps", steps,
+		"task_id", job.GetString("task_id"),
+	)
+	return job, nil
 }
 
-func failJob(app core.App, job *core.Record, document *core.Record, err error) error {
-	documentID := ""
-	if document != nil {
-		documentID = document.Id
-	} else {
-		documentID = job.GetString("document")
+func (p *Processor) dispatch(jobID string) {
+	if !p.processing.TryLock() {
+		return
 	}
-	log.Printf("[worker] job=%s document=%s failed: %v", job.Id, documentID, err)
-
-	job.Set("status", models.JobStatusFailed)
-	job.Set("finished_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
-	if saveErr := app.Save(job); saveErr != nil {
-		return saveErr
-	}
-
-	if document != nil {
-		document.Set("processing_status", models.DocStatusFailed)
-		if saveErr := app.Save(document); saveErr != nil {
-			return saveErr
+	go func() {
+		defer p.processing.Unlock()
+		if err := p.runJob(jobID); err != nil {
+			p.app.Logger().Error("job error", "job", jobID, slog.Any("error", err))
 		}
-	}
-
-	return err
+	}()
 }
 
-func truncateError(msg string, max int) string {
-	if len(msg) <= max {
-		return msg
-	}
-	return msg[:max]
-}
-
-func truncateForLog(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "…"
-}
-
-func stepsInclude(steps []string, name string) bool {
-	for _, step := range steps {
-		if step == name {
-			return true
-		}
-	}
-	return false
-}
-
-func finalizeDocumentWithoutApply(app core.App, document *core.Record, steps []string) error {
-	if stepsInclude(steps, models.StepApplyMetadata) {
+func (p *Processor) processNextPending() error {
+	if !p.processing.TryLock() {
 		return nil
 	}
-	document.Set("processing_status", models.DocStatusCompleted)
-	return app.Save(document)
+	defer p.processing.Unlock()
+
+	jobs, err := p.app.FindRecordsByFilter(
+		"processing_jobs",
+		"status = {:status}",
+		"created",
+		1,
+		0,
+		map[string]any{"status": models.JobStatusPending},
+	)
+	if err != nil {
+		return err
+	}
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	return p.runJob(jobs[0].Id)
+}
+
+func (p *Processor) runJob(jobID string) error {
+	claimed := false
+	err := p.app.RunInTransaction(func(txApp core.App) error {
+		job, err := txApp.FindRecordById("processing_jobs", jobID)
+		if err != nil {
+			return err
+		}
+		if job.GetString("status") != models.JobStatusPending {
+			return nil
+		}
+
+		steps, err := parseSteps(job)
+		if err != nil {
+			return err
+		}
+		if len(steps) == 0 {
+			return fmt.Errorf("job %s has no steps", jobID)
+		}
+
+		document, err := txApp.FindRecordById("documents", job.GetString("document"))
+		if err != nil {
+			return err
+		}
+
+		claimed = true
+		p.app.Logger().Info("picked job",
+			"job", job.Id,
+			"document", document.Id,
+			"steps", steps,
+		)
+
+		job.Set("status", models.JobStatusRunning)
+		if job.GetString("started_at") == "" {
+			job.Set("started_at", nowTimestamp())
+		}
+
+		runs, err := parseStepRuns(job)
+		if err != nil {
+			return err
+		}
+		runs = syncStepRuns(steps, runs)
+		if len(runs) == 0 {
+			runs = initStepRuns(steps)
+		}
+		saveStepRuns(job, runs)
+
+		document.Set("processing_status", models.DocStatusProcessing)
+		if err := txApp.Save(document); err != nil {
+			return err
+		}
+		return txApp.Save(job)
+	})
+	if err != nil {
+		return err
+	}
+	if !claimed {
+		return nil
+	}
+
+	runner := NewPipelineRunner(p.app, p.cfg, p.ocr, p.ai)
+	return runner.Run(context.Background(), jobID)
 }
