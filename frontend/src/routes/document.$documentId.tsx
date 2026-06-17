@@ -348,55 +348,45 @@ export function DocumentDetailPage() {
       </div>
 
       {job && showProcessingJob && (
-        <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-stone-950">Processing job</h3>
-          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <dt className="text-xs text-stone-400">Status</dt>
-              <dd className="text-sm text-stone-700">{job.status}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-stone-400">Steps</dt>
-              <dd className="text-sm text-stone-700">{(job.steps ?? []).join(' → ') || 'n/a'}</dd>
-            </div>
+        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h3 className="text-sm font-semibold text-stone-950">Processing job</h3>
+            <span className="rounded bg-stone-200 px-1.5 py-0.5 text-xs font-medium text-stone-700">
+              {job.status}
+            </span>
             {job.current_step ? (
-              <div>
-                <dt className="text-xs text-stone-400">Current step</dt>
-                <dd className="text-sm text-stone-700">{job.current_step}</dd>
-              </div>
+              <span className="text-xs text-stone-500">current: {job.current_step}</span>
             ) : null}
-            {job.step_runs && job.step_runs.length > 0 ? (
-              <div className="col-span-2 sm:col-span-4">
-                <dt className="mb-2 text-xs text-stone-400">Step runs</dt>
-                <dd>
-                  <ul className="space-y-1 text-sm text-stone-700">
-                    {job.step_runs.map((run) => (
-                      <li key={run.name} className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{run.name}</span>
-                        <span className="rounded bg-stone-200 px-1.5 py-0.5 text-xs">{run.status}</span>
-                        {run.attempts > 0 ? (
-                          <span className="text-xs text-stone-500">attempts: {run.attempts}</span>
-                        ) : null}
-                        {run.provider ? (
-                          <span className="text-xs text-stone-500">provider: {run.provider}</span>
-                        ) : null}
-                        {run.model ? (
-                          <span className="text-xs text-stone-500">model: {run.model}</span>
-                        ) : null}
-                        {run.prompt_version ? (
-                          <span className="text-xs text-stone-500">prompt: {run.prompt_version}</span>
-                        ) : null}
-                        {run.error ? <span className="text-xs text-red-600">{run.error}</span> : null}
-                      </li>
-                    ))}
-                  </ul>
-                </dd>
-              </div>
-            ) : null}
-          </dl>
+            <span className="text-xs text-stone-500">
+              {(job.steps ?? []).join(' → ') || 'n/a'}
+            </span>
+          </div>
+          {job.step_runs && job.step_runs.length > 0 ? (
+            <ul className="mt-2 flex flex-col gap-1 text-sm text-stone-700">
+              {job.step_runs.map((run) => (
+                <li key={run.name} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="font-medium">{run.name}</span>
+                  <span className="rounded bg-stone-200 px-1.5 py-0.5 text-xs">{run.status}</span>
+                  {run.attempts > 0 ? (
+                    <span className="text-xs text-stone-500">attempts: {run.attempts}</span>
+                  ) : null}
+                  {run.provider ? (
+                    <span className="text-xs text-stone-500">provider: {run.provider}</span>
+                  ) : null}
+                  {run.model ? (
+                    <span className="text-xs text-stone-500">model: {run.model}</span>
+                  ) : null}
+                  {run.prompt_version ? (
+                    <span className="text-xs text-stone-500">prompt: {run.prompt_version}</span>
+                  ) : null}
+                  {run.error ? <span className="text-xs text-red-600">{run.error}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
           <form
-            className="mt-4 flex flex-col gap-3 border-t border-stone-200 pt-4"
+            className="mt-3 flex flex-col gap-2 border-t border-stone-200 pt-3"
             onSubmit={onReprocessSubmit}
           >
             <div>
@@ -413,7 +403,7 @@ export function DocumentDetailPage() {
                 return (
                   <label
                     key={step}
-                    className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
+                    className={`flex items-start gap-2 rounded-md border px-3 py-1.5 text-sm ${
                       selectable
                         ? 'border-stone-200 bg-white text-stone-700'
                         : 'border-stone-100 bg-stone-100/80 text-stone-400'

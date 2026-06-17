@@ -12,7 +12,7 @@ The API has been tested with the [swift-paperless](https://github.com/paulgessin
 
 - **Backend:** Go, [PocketBase as a framework](https://pocketbase.io/docs/use-as-framework/)
 - **Frontend:** React, TanStack Router, PocketBase JS SDK
-- **OCR:** Google Cloud Vision (`google_vision`) or Mistral (`mistral`), selected via `OCR_PROVIDER`
+- **OCR:** Google Cloud Vision (`google_vision`) or Mistral AI OCR (`mistral`), selected via `OCR_PROVIDER`
 - **AI:** OpenAI-compatible chat completions via the official OpenAI Go SDK
 
 ## Project layout
