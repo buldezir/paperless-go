@@ -81,6 +81,7 @@ func (r *PipelineRunner) Run(ctx context.Context, jobID string) error {
 		OCR:        r.OCR,
 		AI:         r.AI,
 		Metadata:   metadata,
+		MimeType:   ocr.GuessMimeType(document.GetString("file")),
 		ForceSteps: parseForceSteps(job),
 		Logger:     logger,
 	}
