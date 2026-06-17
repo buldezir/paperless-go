@@ -6,6 +6,18 @@ import (
 	"paperless-go/backend/internal/models"
 )
 
+func TestExtractedMetadataPopulated(t *testing.T) {
+	if (&models.ExtractedMetadata{}).Populated() {
+		t.Fatal("expected empty metadata not to be populated")
+	}
+	if (*models.ExtractedMetadata)(nil).Populated() {
+		t.Fatal("expected nil metadata not to be populated")
+	}
+	if !(&models.ExtractedMetadata{Title: "Invoice"}).Populated() {
+		t.Fatal("expected metadata with title to be populated")
+	}
+}
+
 func TestParseExtractedMetadataValid(t *testing.T) {
 	raw := `{
 		"title": "Invoice 001",

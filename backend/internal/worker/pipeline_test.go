@@ -99,6 +99,37 @@ func TestExtractMetadataShouldSkipWhenSnapshotExists(t *testing.T) {
 	}
 }
 
+func TestExtractMetadataShouldNotSkipWhenSnapshotEmpty(t *testing.T) {
+	jobs := coreTestJobsCollection()
+	job := core.NewRecord(jobs)
+	job.Set("metadata_json", map[string]any{})
+
+	step := &ExtractMetadataStep{}
+	state := &StepState{Job: job}
+
+	skipped, err := step.ShouldSkip(state)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if skipped {
+		t.Fatal("expected extract_metadata to run when metadata_json is empty")
+	}
+}
+
+func TestLoadMetadataJSONIgnoresEmptySnapshot(t *testing.T) {
+	jobs := coreTestJobsCollection()
+	job := core.NewRecord(jobs)
+	job.Set("metadata_json", map[string]any{})
+
+	metadata, err := loadMetadataJSON(job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metadata != nil {
+		t.Fatalf("expected nil metadata for empty snapshot, got %+v", metadata)
+	}
+}
+
 func TestOCRShouldSkipWhenTextExists(t *testing.T) {
 	docs := coreTestDocumentsCollection()
 	doc := core.NewRecord(docs)

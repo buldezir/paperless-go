@@ -44,6 +44,10 @@ type ExtractedMetadata struct {
 	Confidence            float64  `json:"confidence"`
 }
 
+func (m *ExtractedMetadata) Populated() bool {
+	return m != nil && strings.TrimSpace(m.Title) != ""
+}
+
 func (m *ExtractedMetadata) Validate() error {
 	if strings.TrimSpace(m.Title) == "" {
 		return fmt.Errorf("title is required")

@@ -194,6 +194,9 @@ func loadMetadataJSON(job *core.Record) (*models.ExtractedMetadata, error) {
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		return nil, fmt.Errorf("unmarshal metadata_json: %w", err)
 	}
+	if !metadata.Populated() {
+		return nil, nil
+	}
 	return &metadata, nil
 }
 

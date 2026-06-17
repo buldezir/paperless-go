@@ -21,12 +21,12 @@ func (s *ExtractMetadataStep) ShouldSkip(state *StepState) (bool, error) {
 	if state.forced(models.StepExtractMetadata) {
 		return false, nil
 	}
-	if state.Metadata != nil {
+	if state.Metadata.Populated() {
 		return true, nil
 	}
 	if metadata, err := loadMetadataJSON(state.Job); err != nil {
 		return false, err
-	} else if metadata != nil {
+	} else if metadata.Populated() {
 		state.Metadata = metadata
 		return true, nil
 	}
