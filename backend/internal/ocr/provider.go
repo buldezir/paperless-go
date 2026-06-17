@@ -3,7 +3,7 @@ package ocr
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -18,6 +18,7 @@ type ProviderConfig struct {
 	MistralModel       string
 	MistralBaseURL     string
 	OCRTimeout         time.Duration
+	Logger             *slog.Logger
 }
 
 type ProviderInfo struct {
@@ -42,14 +43,14 @@ func NewProvider(name string, cfg ProviderConfig) (Provider, error) {
 		if cfg.GoogleVisionAPIKey == "" {
 			return nil, fmt.Errorf("GOOGLE_VISION_API_KEY is required when OCR_PROVIDER=google_vision")
 		}
-		log.Printf("[ocr] using provider=google_vision")
-		return NewGoogleVisionProvider(cfg.GoogleVisionAPIKey), nil
+		cfg.Logger.Info("using provider", "provider", "google_vision")
+		return NewGoogleVisionProvider(cfg.GoogleVisionAPIKey, cfg.Logger), nil
 	case "mistral":
 		if cfg.MistralAPIKey == "" {
 			return nil, fmt.Errorf("MISTRAL_API_KEY is required when OCR_PROVIDER=mistral")
 		}
-		log.Printf("[ocr] using provider=mistral model=%s", cfg.MistralModel)
-		return NewMistralProvider(cfg.MistralAPIKey, cfg.MistralModel, cfg.MistralBaseURL, cfg.OCRTimeout), nil
+		cfg.Logger.Info("using provider", "provider", "mistral", "model", cfg.MistralModel)
+		return NewMistralProvider(cfg.MistralAPIKey, cfg.MistralModel, cfg.MistralBaseURL, cfg.OCRTimeout, cfg.Logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported OCR provider %q (supported: google_vision, mistral)", name)
 	}

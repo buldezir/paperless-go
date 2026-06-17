@@ -45,8 +45,9 @@ func handleOCRProviders(cfg config.Config) func(*core.RequestEvent) error {
 	}
 }
 
-func handleOCRTest(cfg config.Config) func(*core.RequestEvent) error {
+func handleOCRTest(app core.App, cfg config.Config) func(*core.RequestEvent) error {
 	providerCfg := ocrProviderConfig(cfg)
+	providerCfg.Logger = app.Logger().With("component", "ocr")
 
 	return func(e *core.RequestEvent) error {
 		if err := e.Request.ParseMultipartForm(ocrTestMaxFileBytes + (1 << 20)); err != nil {

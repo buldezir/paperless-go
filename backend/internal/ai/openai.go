@@ -3,7 +3,7 @@ package ai
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -54,9 +54,10 @@ type OpenAIClient struct {
 	promptVer      string
 	resultLanguage string
 	client         openai.Client
+	logger         *slog.Logger
 }
 
-func NewOpenAIClient(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration) *OpenAIClient {
+func NewOpenAIClient(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration, logger *slog.Logger) *OpenAIClient {
 	opts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
 		option.WithHTTPClient(&http.Client{Timeout: timeout}),
@@ -73,6 +74,7 @@ func NewOpenAIClient(apiKey, model, baseURL, promptVer, resultLanguage string, t
 		promptVer:      promptVer,
 		resultLanguage: resultLanguage,
 		client:         openai.NewClient(opts...),
+		logger:         logger,
 	}
 }
 
@@ -91,11 +93,17 @@ func (c *OpenAIClient) ExtractMetadata(ctx context.Context, ocrText string) (*mo
 
 	inputChars := len(ocrText)
 	sentChars := len(truncate(ocrText, 12000))
-	log.Printf("[ai] extraction starting provider=%s model=%s prompt_ver=%s ocr_chars=%d sent_chars=%d result_lang=%q",
-		c.Name(), c.model, c.promptVer, inputChars, sentChars, c.resultLanguage)
+	c.logger.Info("extraction starting",
+		"provider", c.Name(),
+		"model", c.model,
+		"prompt_ver", c.promptVer,
+		"ocr_chars", inputChars,
+		"sent_chars", sentChars,
+		"result_lang", c.resultLanguage,
+	)
 
 	requestStart := time.Now()
-	log.Printf("[ai] chat completion model=%s base_url=%q messages=2", c.model, c.baseURL)
+	c.logger.Info("chat completion", "model", c.model, "base_url", c.baseURL, "messages", 2)
 	chatResp, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model: shared.ChatModel(c.model),
 		Messages: []openai.ChatCompletionMessageParamUnion{
@@ -108,11 +116,16 @@ func (c *OpenAIClient) ExtractMetadata(ctx context.Context, ocrText string) (*mo
 		Temperature: openai.Float(0.1),
 	})
 	if err != nil {
-		log.Printf("[ai] request failed duration=%s: %v", time.Since(requestStart).Round(time.Millisecond), err)
+		c.logger.Error("request failed",
+			"duration", time.Since(requestStart).Round(time.Millisecond),
+			slog.Any("error", err),
+		)
 		return nil, fmt.Errorf("openai chat completion: %w", err)
 	}
-	log.Printf("[ai] response choices=%d duration=%s",
-		len(chatResp.Choices), time.Since(requestStart).Round(time.Millisecond))
+	c.logger.Info("response",
+		"choices", len(chatResp.Choices),
+		"duration", time.Since(requestStart).Round(time.Millisecond),
+	)
 
 	if len(chatResp.Choices) == 0 {
 		return nil, fmt.Errorf("openai returned no choices")
@@ -121,12 +134,19 @@ func (c *OpenAIClient) ExtractMetadata(ctx context.Context, ocrText string) (*mo
 	content := chatResp.Choices[0].Message.Content
 	metadata, err := models.ParseExtractedMetadata(content)
 	if err != nil {
-		log.Printf("[ai] parse failed content_chars=%d: %v", len(content), err)
+		c.logger.Error("parse failed",
+			"content_chars", len(content),
+			slog.Any("error", err),
+		)
 		return nil, err
 	}
-	log.Printf("[ai] extraction complete confidence=%.2f title=%q type=%q tags=%d content_chars=%d",
-		metadata.Confidence, truncateForLog(metadata.Title, 80), truncateForLog(metadata.DocumentType, 40),
-		len(metadata.Tags), len(content))
+	c.logger.Info("extraction complete",
+		"confidence", metadata.Confidence,
+		"title", truncateForLog(metadata.Title, 80),
+		"type", truncateForLog(metadata.DocumentType, 40),
+		"tags", len(metadata.Tags),
+		"content_chars", len(content),
+	)
 	return metadata, nil
 }
 
@@ -149,6 +169,6 @@ func truncateForLog(s string, max int) string {
 	return s[:max] + "…"
 }
 
-func NewExtractor(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration) Extractor {
-	return NewOpenAIClient(apiKey, model, baseURL, promptVer, resultLanguage, timeout)
+func NewExtractor(apiKey, model, baseURL, promptVer, resultLanguage string, timeout time.Duration, logger *slog.Logger) Extractor {
+	return NewOpenAIClient(apiKey, model, baseURL, promptVer, resultLanguage, timeout, logger)
 }

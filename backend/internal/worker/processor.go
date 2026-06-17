@@ -3,8 +3,8 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/google/uuid"
@@ -25,15 +25,18 @@ type Processor struct {
 
 func Register(app core.App) {
 	cfg := config.Load()
+	ocrLogger := app.Logger().With("component", "ocr")
 	ocrProvider, err := ocr.NewProvider(cfg.OCRProvider, ocr.ProviderConfig{
 		GoogleVisionAPIKey: cfg.GoogleVisionAPIKey,
 		MistralAPIKey:      cfg.MistralAPIKey,
 		MistralModel:       cfg.MistralOCRModel,
 		MistralBaseURL:     cfg.MistralAPIBaseURL,
 		OCRTimeout:         cfg.OCRTimeout,
+		Logger:             ocrLogger,
 	})
 	if err != nil {
-		log.Fatalf("[worker] OCR provider: %v", err)
+		app.Logger().Error("OCR provider init failed", slog.Any("error", err))
+		os.Exit(1)
 	}
 	aiExtractor := ai.NewExtractor(
 		cfg.OpenAIAPIKey,
@@ -42,6 +45,7 @@ func Register(app core.App) {
 		cfg.ExtractionPromptVer,
 		cfg.ProcessingResultLanguage,
 		cfg.OpenAITimeout,
+		app.Logger().With("component", "ai"),
 	)
 
 	p := &Processor{

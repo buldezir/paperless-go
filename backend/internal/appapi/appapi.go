@@ -14,6 +14,7 @@ func Register(app core.App) {
 		cfg.OpenAIChatModel,
 		cfg.OpenAIBaseURL,
 		cfg.OpenAITimeout,
+		app.Logger().With("component", "ai"),
 	)
 
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
@@ -22,7 +23,7 @@ func Register(app core.App) {
 			g := e.Router.Group("/api/app")
 			g.POST("/documents/{documentId}/chat", bindAuth(handleDocumentChat(app, chatter)))
 			g.GET("/ocr/providers", bindAuth(handleOCRProviders(cfg)))
-			g.POST("/ocr/test", bindAuth(handleOCRTest(cfg)))
+			g.POST("/ocr/test", bindAuth(handleOCRTest(app, cfg)))
 			return e.Next()
 		},
 	})

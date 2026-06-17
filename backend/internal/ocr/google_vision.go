@@ -3,7 +3,7 @@ package ocr
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,18 +25,20 @@ func visionDocumentTextFeatures() []*visionpb.Feature {
 type GoogleVisionProvider struct {
 	client  *vision.ImageAnnotatorClient
 	initErr error
+	logger  *slog.Logger
 }
 
-func NewGoogleVisionProvider(apiKey string) *GoogleVisionProvider {
+func NewGoogleVisionProvider(apiKey string, logger *slog.Logger) *GoogleVisionProvider {
 	client, err := vision.NewImageAnnotatorClient(context.Background(), option.WithAPIKey(apiKey))
 	if err != nil {
-		log.Printf("[ocr] google vision client init failed: %v", err)
+		logger.Error("google vision client init failed", slog.Any("error", err))
 	} else {
-		log.Printf("[ocr] google vision client initialized")
+		logger.Info("google vision client initialized")
 	}
 	return &GoogleVisionProvider{
 		client:  client,
 		initErr: err,
+		logger:  logger,
 	}
 }
 
@@ -61,8 +63,13 @@ func (p *GoogleVisionProvider) ExtractText(ctx context.Context, filePath string,
 		effectiveMime = visionFileMimeType(mimeType, filePath)
 		mode = "file"
 	}
-	log.Printf("[ocr] google vision starting file=%q mime=%s effective_mime=%s mode=%s bytes=%d",
-		filepath.Base(filePath), mimeType, effectiveMime, mode, len(data))
+	p.logger.Info("google vision starting",
+		"file", filepath.Base(filePath),
+		"mime", mimeType,
+		"effective_mime", effectiveMime,
+		"mode", mode,
+		"bytes", len(data),
+	)
 
 	var text string
 	if mode == "file" {
@@ -71,12 +78,18 @@ func (p *GoogleVisionProvider) ExtractText(ctx context.Context, filePath string,
 		text, err = p.extractImageText(ctx, data, mimeType)
 	}
 	if err != nil {
-		log.Printf("[ocr] google vision failed file=%q duration=%s: %v",
-			filepath.Base(filePath), time.Since(start).Round(time.Millisecond), err)
+		p.logger.Error("google vision failed",
+			"file", filepath.Base(filePath),
+			"duration", time.Since(start).Round(time.Millisecond),
+			slog.Any("error", err),
+		)
 		return "", err
 	}
-	log.Printf("[ocr] google vision complete file=%q chars=%d duration=%s",
-		filepath.Base(filePath), len(text), time.Since(start).Round(time.Millisecond))
+	p.logger.Info("google vision complete",
+		"file", filepath.Base(filePath),
+		"chars", len(text),
+		"duration", time.Since(start).Round(time.Millisecond),
+	)
 	return text, nil
 }
 
@@ -119,8 +132,11 @@ func (p *GoogleVisionProvider) extractFileText(ctx context.Context, content []by
 
 	parts := append([]string{}, first.pageTexts...)
 	totalPages := first.totalPages
-	log.Printf("[ocr] google vision file mime=%s total_pages=%d first_batch_pages=%d",
-		mimeType, totalPages, len(first.pageTexts))
+	p.logger.Info("google vision file",
+		"mime", mimeType,
+		"total_pages", totalPages,
+		"first_batch_pages", len(first.pageTexts),
+	)
 
 	for start := visionMaxFilePagesPerRequest + 1; start <= totalPages; start += visionMaxFilePagesPerRequest {
 		end := start + visionMaxFilePagesPerRequest - 1
@@ -133,13 +149,17 @@ func (p *GoogleVisionProvider) extractFileText(ctx context.Context, content []by
 			pages = append(pages, int32(page))
 		}
 
-		log.Printf("[ocr] google vision file batch pages=%d-%d", start, end)
+		p.logger.Info("google vision file batch", "pages_start", start, "pages_end", end)
 		batch, err := p.annotateFile(ctx, content, mimeType, pages)
 		if err != nil {
 			return "", fmt.Errorf("ocr %s pages %d-%d: %w", mimeType, start, end, err)
 		}
 		parts = append(parts, batch.pageTexts...)
-		log.Printf("[ocr] google vision file batch pages=%d-%d extracted=%d", start, end, len(batch.pageTexts))
+		p.logger.Info("google vision file batch complete",
+			"pages_start", start,
+			"pages_end", end,
+			"extracted", len(batch.pageTexts),
+		)
 	}
 
 	text := strings.Join(parts, "\n\n")
@@ -193,8 +213,13 @@ func (p *GoogleVisionProvider) annotateFile(ctx context.Context, content []byte,
 		}
 	}
 
-	log.Printf("[ocr] google vision BatchAnnotateFiles mime=%s pages=%v extracted=%d total_pages=%d duration=%s",
-		mimeType, pages, len(pageTexts), fileResp.GetTotalPages(), time.Since(start).Round(time.Millisecond))
+	p.logger.Info("google vision BatchAnnotateFiles",
+		"mime", mimeType,
+		"pages", pages,
+		"extracted", len(pageTexts),
+		"total_pages", fileResp.GetTotalPages(),
+		"duration", time.Since(start).Round(time.Millisecond),
+	)
 	return fileAnnotateResult{
 		pageTexts:  pageTexts,
 		totalPages: int(fileResp.GetTotalPages()),
@@ -237,8 +262,11 @@ func (p *GoogleVisionProvider) extractImageText(ctx context.Context, content []b
 		return "", fmt.Errorf("google vision returned empty text for mime type %s", mimeType)
 	}
 
-	log.Printf("[ocr] google vision BatchAnnotateImages mime=%s chars=%d duration=%s",
-		mimeType, len(text), time.Since(start).Round(time.Millisecond))
+	p.logger.Info("google vision BatchAnnotateImages",
+		"mime", mimeType,
+		"chars", len(text),
+		"duration", time.Since(start).Round(time.Millisecond),
+	)
 	return text, nil
 }
 

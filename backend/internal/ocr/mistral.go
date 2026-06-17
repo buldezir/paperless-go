@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,9 +22,10 @@ type MistralProvider struct {
 	model   string
 	baseURL string
 	client  *http.Client
+	logger  *slog.Logger
 }
 
-func NewMistralProvider(apiKey, model, baseURL string, timeout time.Duration) *MistralProvider {
+func NewMistralProvider(apiKey, model, baseURL string, timeout time.Duration, logger *slog.Logger) *MistralProvider {
 	if timeout <= 0 {
 		timeout = 40 * time.Second
 	}
@@ -33,6 +34,7 @@ func NewMistralProvider(apiKey, model, baseURL string, timeout time.Duration) *M
 		model:   model,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		client:  &http.Client{Timeout: timeout},
+		logger:  logger,
 	}
 }
 
@@ -57,18 +59,28 @@ func (p *MistralProvider) ExtractText(ctx context.Context, filePath string, mime
 		return "", err
 	}
 
-	log.Printf("[ocr] mistral starting file=%q mime=%s doc_type=%s bytes=%d",
-		filepath.Base(filePath), effectiveMime, docType, len(data))
+	p.logger.Info("mistral starting",
+		"file", filepath.Base(filePath),
+		"mime", effectiveMime,
+		"doc_type", docType,
+		"bytes", len(data),
+	)
 
 	text, err := p.requestOCR(ctx, docType, dataURL)
 	if err != nil {
-		log.Printf("[ocr] mistral failed file=%q duration=%s: %v",
-			filepath.Base(filePath), time.Since(start).Round(time.Millisecond), err)
+		p.logger.Error("mistral failed",
+			"file", filepath.Base(filePath),
+			"duration", time.Since(start).Round(time.Millisecond),
+			slog.Any("error", err),
+		)
 		return "", err
 	}
 
-	log.Printf("[ocr] mistral complete file=%q chars=%d duration=%s",
-		filepath.Base(filePath), len(text), time.Since(start).Round(time.Millisecond))
+	p.logger.Info("mistral complete",
+		"file", filepath.Base(filePath),
+		"chars", len(text),
+		"duration", time.Since(start).Round(time.Millisecond),
+	)
 	return text, nil
 }
 

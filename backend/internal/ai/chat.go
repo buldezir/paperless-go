@@ -3,7 +3,7 @@ package ai
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -58,18 +58,23 @@ func (c *OpenAIClient) Chat(ctx context.Context, ocrText string, messages []Chat
 	}
 
 	requestStart := time.Now()
-	log.Printf("[ai] chat completion model=%s base_url=%q messages=%d", c.model, c.baseURL, len(apiMessages))
+	c.logger.Info("chat completion", "model", c.model, "base_url", c.baseURL, "messages", len(apiMessages))
 	chatResp, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model:       shared.ChatModel(c.model),
 		Messages:    apiMessages,
 		Temperature: openai.Float(0.3),
 	})
 	if err != nil {
-		log.Printf("[ai] chat request failed duration=%s: %v", time.Since(requestStart).Round(time.Millisecond), err)
+		c.logger.Error("chat request failed",
+			"duration", time.Since(requestStart).Round(time.Millisecond),
+			slog.Any("error", err),
+		)
 		return "", fmt.Errorf("openai chat completion: %w", err)
 	}
-	log.Printf("[ai] chat response choices=%d duration=%s",
-		len(chatResp.Choices), time.Since(requestStart).Round(time.Millisecond))
+	c.logger.Info("chat response",
+		"choices", len(chatResp.Choices),
+		"duration", time.Since(requestStart).Round(time.Millisecond),
+	)
 
 	if len(chatResp.Choices) == 0 {
 		return "", fmt.Errorf("openai returned no choices")
@@ -78,6 +83,6 @@ func (c *OpenAIClient) Chat(ctx context.Context, ocrText string, messages []Chat
 	return strings.TrimSpace(chatResp.Choices[0].Message.Content), nil
 }
 
-func NewChatter(apiKey, model, baseURL string, timeout time.Duration) Chatter {
-	return NewOpenAIClient(apiKey, model, baseURL, "", "", timeout)
+func NewChatter(apiKey, model, baseURL string, timeout time.Duration, logger *slog.Logger) Chatter {
+	return NewOpenAIClient(apiKey, model, baseURL, "", "", timeout, logger)
 }
