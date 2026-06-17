@@ -52,24 +52,43 @@ export type TagRecord = {
   name: string
 }
 
+export type ProcessingStep = 'preview' | 'ocr' | 'extract_metadata' | 'apply_metadata'
+
+export type StepRunRecord = {
+  name: ProcessingStep
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+  attempts: number
+  provider?: string
+  model?: string
+  prompt_version?: string
+  started_at?: string
+  finished_at?: string
+  error?: string
+}
+
+export const FULL_PIPELINE_STEPS: ProcessingStep[] = [
+  'preview',
+  'ocr',
+  'extract_metadata',
+  'apply_metadata',
+]
+
+export const EXTRACTION_PIPELINE_STEPS: ProcessingStep[] = ['extract_metadata', 'apply_metadata']
+
 export type ProcessingJobRecord = {
   id: string
   document: string
   status: string
-  job_type: 'full' | 'extraction'
-  retry_count: number
-  ocr_provider: string
-  ai_provider: string
-  ai_model: string
-  prompt_version: string
-  error_message: string
+  steps: ProcessingStep[]
+  step_runs?: StepRunRecord[]
+  current_step?: string
   started_at: string
   finished_at: string
   created: string
   updated: string
 }
 
-export type ReprocessMode = 'full' | 'extraction'
+export type ReprocessPreset = 'full' | 'extraction'
 
 export type ChatMessage = {
   role: 'user' | 'assistant'
@@ -92,7 +111,15 @@ export function fileUrl(record: DocumentRecord, filename?: string) {
   return pb.files.getURL(record, filename ?? record.file)
 }
 
-export async function reprocessDocument(documentId: string, mode: ReprocessMode = 'full') {
+export function reprocessStepsForPreset(preset: ReprocessPreset): ProcessingStep[] {
+  return preset === 'full' ? [...FULL_PIPELINE_STEPS] : [...EXTRACTION_PIPELINE_STEPS]
+}
+
+export async function reprocessDocument(
+  documentId: string,
+  steps: ProcessingStep[],
+  forceSteps?: ProcessingStep[],
+) {
   await ensureAuth()
   await pb.collection('documents').update(documentId, {
     processing_status: 'pending',
@@ -100,7 +127,8 @@ export async function reprocessDocument(documentId: string, mode: ReprocessMode 
   return pb.collection('processing_jobs').create({
     document: documentId,
     status: 'pending',
-    job_type: mode,
+    steps,
+    ...(forceSteps?.length ? { force_steps: forceSteps } : {}),
   })
 }
 

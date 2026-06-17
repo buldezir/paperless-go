@@ -1,0 +1,200 @@
+package worker
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/pocketbase/pocketbase/core"
+	"paperless-go/backend/internal/models"
+)
+
+func parseSteps(job *core.Record) ([]string, error) {
+	raw := job.Get("steps")
+	if raw == nil {
+		return nil, nil
+	}
+
+	switch v := raw.(type) {
+	case []string:
+		return v, nil
+	case []any:
+		steps := make([]string, 0, len(v))
+		for _, item := range v {
+			name, ok := item.(string)
+			if !ok || name == "" {
+				continue
+			}
+			steps = append(steps, name)
+		}
+		return steps, nil
+	default:
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return nil, fmt.Errorf("marshal steps: %w", err)
+		}
+		var steps []string
+		if err := json.Unmarshal(data, &steps); err != nil {
+			return nil, fmt.Errorf("unmarshal steps: %w", err)
+		}
+		return steps, nil
+	}
+}
+
+func parseForceSteps(job *core.Record) map[string]bool {
+	forced := make(map[string]bool)
+	raw := job.Get("force_steps")
+	if raw == nil {
+		return forced
+	}
+
+	var names []string
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return forced
+	}
+	if err := json.Unmarshal(data, &names); err != nil {
+		return forced
+	}
+	for _, name := range names {
+		if name != "" {
+			forced[name] = true
+		}
+	}
+	return forced
+}
+
+func parseStepRuns(job *core.Record) ([]models.StepRun, error) {
+	raw := job.Get("step_runs")
+	if raw == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("marshal step_runs: %w", err)
+	}
+
+	var runs []models.StepRun
+	if err := json.Unmarshal(data, &runs); err != nil {
+		return nil, fmt.Errorf("unmarshal step_runs: %w", err)
+	}
+	return runs, nil
+}
+
+func initStepRuns(steps []string) []models.StepRun {
+	runs := make([]models.StepRun, len(steps))
+	for i, name := range steps {
+		runs[i] = models.StepRun{
+			Name:     name,
+			Status:   models.StepStatusPending,
+			Attempts: 0,
+		}
+	}
+	return runs
+}
+
+func syncStepRuns(steps []string, existing []models.StepRun) []models.StepRun {
+	byName := make(map[string]models.StepRun, len(existing))
+	for _, run := range existing {
+		byName[run.Name] = run
+	}
+
+	runs := make([]models.StepRun, len(steps))
+	for i, name := range steps {
+		if run, ok := byName[name]; ok {
+			runs[i] = run
+			continue
+		}
+		runs[i] = models.StepRun{
+			Name:     name,
+			Status:   models.StepStatusPending,
+			Attempts: 0,
+		}
+	}
+	return runs
+}
+
+func saveStepRuns(job *core.Record, runs []models.StepRun) {
+	job.Set("step_runs", runs)
+}
+
+func nextRunnableIndex(runs []models.StepRun) int {
+	for i, run := range runs {
+		switch run.Status {
+		case models.StepStatusCompleted, models.StepStatusSkipped:
+			continue
+		default:
+			return i
+		}
+	}
+	return -1
+}
+
+func markStepRunning(run *models.StepRun) {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	run.Status = models.StepStatusRunning
+	run.Attempts++
+	run.StartedAt = now
+	run.FinishedAt = ""
+	run.Error = ""
+}
+
+func setStepRunExecutionDetails(run *models.StepRun, state *StepState) {
+	switch run.Name {
+	case models.StepOCR:
+		if state.OCR != nil {
+			run.Provider = state.OCR.Name()
+		}
+	case models.StepExtractMetadata:
+		if state.AI != nil {
+			run.Provider = state.AI.Name()
+			run.Model = state.AI.Model()
+		}
+		run.PromptVersion = state.Cfg.ExtractionPromptVer
+	}
+}
+
+func markStepCompleted(run *models.StepRun, skipped bool) {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	if skipped {
+		run.Status = models.StepStatusSkipped
+	} else {
+		run.Status = models.StepStatusCompleted
+	}
+	run.FinishedAt = now
+	run.Error = ""
+}
+
+func markStepFailed(run *models.StepRun, err error) {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	run.Status = models.StepStatusFailed
+	run.FinishedAt = now
+	run.Error = truncateError(err.Error(), 1900)
+}
+
+func loadMetadataJSON(job *core.Record) (*models.ExtractedMetadata, error) {
+	raw := job.Get("metadata_json")
+	if raw == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("marshal metadata_json: %w", err)
+	}
+
+	var metadata models.ExtractedMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata_json: %w", err)
+	}
+	return &metadata, nil
+}
+
+func saveMetadataJSON(job *core.Record, metadata *models.ExtractedMetadata) {
+	if metadata == nil {
+		job.Set("metadata_json", nil)
+		return
+	}
+	job.Set("metadata_json", metadata)
+}

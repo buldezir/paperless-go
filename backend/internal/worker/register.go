@@ -1,8 +1,11 @@
 package worker
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase/core"
@@ -69,7 +72,7 @@ func (p *Processor) registerHooks() {
 			return err
 		}
 
-		_, err := createProcessingJob(e.App, record.Id)
+		_, err := createProcessingJob(e.App, record.Id, models.FullPipelineSteps, nil)
 		return err
 	})
 
@@ -78,11 +81,12 @@ func (p *Processor) registerHooks() {
 		if record.GetString("task_id") == "" {
 			record.Set("task_id", uuid.New().String())
 		}
-		if record.Get("retry_count") == nil {
-			record.Set("retry_count", 0)
+		steps, err := parseSteps(record)
+		if err != nil {
+			return err
 		}
-		if record.GetString("job_type") == "" {
-			record.Set("job_type", models.JobTypeFull)
+		if len(steps) == 0 {
+			record.Set("steps", models.FullPipelineSteps)
 		}
 		return e.Next()
 	})
@@ -124,7 +128,7 @@ func (p *Processor) registerHooks() {
 	})
 }
 
-func createProcessingJob(app core.App, documentID string) (*core.Record, error) {
+func createProcessingJob(app core.App, documentID string, steps []string, forceSteps []string) (*core.Record, error) {
 	jobsCollection, err := app.FindCollectionByNameOrId("processing_jobs")
 	if err != nil {
 		return nil, err
@@ -133,14 +137,17 @@ func createProcessingJob(app core.App, documentID string) (*core.Record, error) 
 	job := core.NewRecord(jobsCollection)
 	job.Set("document", documentID)
 	job.Set("status", models.JobStatusPending)
-	job.Set("job_type", models.JobTypeFull)
+	job.Set("steps", steps)
+	if len(forceSteps) > 0 {
+		job.Set("force_steps", forceSteps)
+	}
 
 	if err := app.Save(job); err != nil {
 		return nil, err
 	}
 
-	log.Printf("[worker] created job=%s document=%s type=%s task_id=%s",
-		job.Id, documentID, models.JobTypeFull, job.GetString("task_id"))
+	log.Printf("[worker] created job=%s document=%s steps=%v task_id=%s",
+		job.Id, documentID, steps, job.GetString("task_id"))
 	return job, nil
 }
 
@@ -181,7 +188,8 @@ func (p *Processor) processNextPending() error {
 }
 
 func (p *Processor) runJob(jobID string) error {
-	return p.app.RunInTransaction(func(txApp core.App) error {
+	claimed := false
+	err := p.app.RunInTransaction(func(txApp core.App) error {
 		job, err := txApp.FindRecordById("processing_jobs", jobID)
 		if err != nil {
 			return err
@@ -190,8 +198,51 @@ func (p *Processor) runJob(jobID string) error {
 			return nil
 		}
 
-		log.Printf("[worker] picked job=%s document=%s type=%s retry=%d",
-			job.Id, job.GetString("document"), job.GetString("job_type"), int(job.GetFloat("retry_count")))
-		return handleJob(txApp, p.cfg, job, p.ocr, p.ai)
+		steps, err := parseSteps(job)
+		if err != nil {
+			return err
+		}
+		if len(steps) == 0 {
+			return fmt.Errorf("job %s has no steps", jobID)
+		}
+
+		document, err := txApp.FindRecordById("documents", job.GetString("document"))
+		if err != nil {
+			return err
+		}
+
+		claimed = true
+		log.Printf("[worker] picked job=%s document=%s steps=%v",
+			job.Id, document.Id, steps)
+
+		job.Set("status", models.JobStatusRunning)
+		if job.GetString("started_at") == "" {
+			job.Set("started_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
+		}
+
+		runs, err := parseStepRuns(job)
+		if err != nil {
+			return err
+		}
+		runs = syncStepRuns(steps, runs)
+		if len(runs) == 0 {
+			runs = initStepRuns(steps)
+		}
+		saveStepRuns(job, runs)
+
+		document.Set("processing_status", models.DocStatusProcessing)
+		if err := txApp.Save(document); err != nil {
+			return err
+		}
+		return txApp.Save(job)
 	})
+	if err != nil {
+		return err
+	}
+	if !claimed {
+		return nil
+	}
+
+	runner := NewPipelineRunner(p.app, p.cfg, p.ocr, p.ai)
+	return runner.Run(context.Background(), jobID)
 }

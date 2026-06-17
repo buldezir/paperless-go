@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import { ensureAuth, fileUrl, pb, reprocessDocument, type ReprocessMode } from '../lib/pocketbase'
+import { ensureAuth, fileUrl, pb, reprocessDocument, reprocessStepsForPreset, type ReprocessPreset } from '../lib/pocketbase'
 import type { DocumentRecord, ProcessingJobRecord } from '../lib/pocketbase'
 
 export function DocumentDetailPage() {
@@ -75,22 +75,22 @@ export function DocumentDetailPage() {
 
   const canReprocessExtraction = canReprocess && Boolean(document?.ocr_text?.trim())
 
-  function requestReprocess(mode: ReprocessMode) {
+  function requestReprocess(preset: ReprocessPreset) {
     const confirmed = window.confirm(
-      mode === 'full'
+      preset === 'full'
         ? 'Run OCR and extraction again from the original file? Existing metadata may be overwritten.'
         : 'Re-run extraction using the current OCR text? Existing metadata may be overwritten.',
     )
     if (confirmed) {
-      void onReprocess(mode)
+      void onReprocess(preset)
     }
   }
 
-  async function onReprocess(mode: ReprocessMode) {
+  async function onReprocess(preset: ReprocessPreset) {
     if (!document || !canReprocess) {
       return
     }
-    if (mode === 'extraction' && !canReprocessExtraction) {
+    if (preset === 'extraction' && !canReprocessExtraction) {
       return
     }
 
@@ -99,7 +99,12 @@ export function DocumentDetailPage() {
       setMessage('')
       setError('')
 
-      await reprocessDocument(document.id, mode)
+      const steps = reprocessStepsForPreset(preset)
+      const forceSteps =
+        preset === 'full'
+          ? (['preview', 'ocr', 'extract_metadata'] as const)
+          : (['extract_metadata'] as const)
+      await reprocessDocument(document.id, steps, [...forceSteps])
 
       const doc = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
         expand: 'tags,document_type,correspondent',
@@ -112,7 +117,7 @@ export function DocumentDetailPage() {
       setDocument(doc)
       setJob(jobs.items[0] ?? null)
       setMessage(
-        mode === 'full'
+        preset === 'full'
           ? 'Document queued for full reprocessing (with OCR).'
           : 'Document queued for extraction reprocessing.',
       )
@@ -310,31 +315,43 @@ export function DocumentDetailPage() {
               <dd className="text-sm text-stone-700">{job.status}</dd>
             </div>
             <div>
-              <dt className="text-xs text-stone-400">Job type</dt>
-              <dd className="text-sm text-stone-700">{job.job_type || 'full'}</dd>
+              <dt className="text-xs text-stone-400">Steps</dt>
+              <dd className="text-sm text-stone-700">{(job.steps ?? []).join(' → ') || 'n/a'}</dd>
             </div>
-            <div>
-              <dt className="text-xs text-stone-400">OCR provider</dt>
-              <dd className="text-sm text-stone-700">{job.ocr_provider || 'n/a'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-stone-400">AI provider</dt>
-              <dd className="text-sm text-stone-700">{job.ai_provider || 'n/a'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-stone-400">AI model</dt>
-              <dd className="text-sm text-stone-700">{job.ai_model || 'n/a'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-stone-400">Prompt version</dt>
-              <dd className="text-sm text-stone-700">{job.prompt_version || 'n/a'}</dd>
-            </div>
-            {job.error_message && (
-              <div className="col-span-2 sm:col-span-4">
-                <dt className="text-xs text-stone-400">Error</dt>
-                <dd className="text-sm text-red-600">{job.error_message}</dd>
+            {job.current_step ? (
+              <div>
+                <dt className="text-xs text-stone-400">Current step</dt>
+                <dd className="text-sm text-stone-700">{job.current_step}</dd>
               </div>
-            )}
+            ) : null}
+            {job.step_runs && job.step_runs.length > 0 ? (
+              <div className="col-span-2 sm:col-span-4">
+                <dt className="mb-2 text-xs text-stone-400">Step runs</dt>
+                <dd>
+                  <ul className="space-y-1 text-sm text-stone-700">
+                    {job.step_runs.map((run) => (
+                      <li key={run.name} className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{run.name}</span>
+                        <span className="rounded bg-stone-200 px-1.5 py-0.5 text-xs">{run.status}</span>
+                        {run.attempts > 0 ? (
+                          <span className="text-xs text-stone-500">attempts: {run.attempts}</span>
+                        ) : null}
+                        {run.provider ? (
+                          <span className="text-xs text-stone-500">provider: {run.provider}</span>
+                        ) : null}
+                        {run.model ? (
+                          <span className="text-xs text-stone-500">model: {run.model}</span>
+                        ) : null}
+                        {run.prompt_version ? (
+                          <span className="text-xs text-stone-500">prompt: {run.prompt_version}</span>
+                        ) : null}
+                        {run.error ? <span className="text-xs text-red-600">{run.error}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            ) : null}
           </dl>
 
           <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-200 pt-4">

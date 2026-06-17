@@ -17,9 +17,6 @@ const (
 	JobStatusFailed      = "failed"
 	JobStatusNeedsReview = "needs_review"
 
-	JobTypeFull        = "full"
-	JobTypeExtraction  = "extraction"
-
 	DocStatusPending     = "pending"
 	DocStatusProcessing  = "processing"
 	DocStatusCompleted   = "completed"

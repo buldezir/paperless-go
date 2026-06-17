@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -11,154 +10,9 @@ import (
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
-	"paperless-go/backend/internal/ai"
-	"paperless-go/backend/internal/config"
 	"paperless-go/backend/internal/models"
 	"paperless-go/backend/internal/ocr"
-	"paperless-go/backend/internal/preview"
 )
-
-func handleJob(app core.App, cfg config.Config, job *core.Record, ocrProvider ocr.Provider, aiExtractor ai.Extractor) error {
-	jobStart := time.Now()
-	documentID := job.GetString("document")
-	jobType := job.GetString("job_type")
-	log.Printf("[worker] job=%s document=%s type=%s starting", job.Id, documentID, jobType)
-
-	job.Set("status", models.JobStatusRunning)
-	job.Set("started_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
-	job.Set("ai_provider", aiExtractor.Name())
-	job.Set("ai_model", aiExtractor.Model())
-	job.Set("prompt_version", cfg.ExtractionPromptVer)
-	if job.GetString("job_type") != models.JobTypeExtraction {
-		job.Set("ocr_provider", ocrProvider.Name())
-	}
-	if err := app.Save(job); err != nil {
-		return err
-	}
-
-	document, err := app.FindRecordById("documents", job.GetString("document"))
-	if err != nil {
-		return failJob(app, job, nil, fmt.Errorf("load document: %w", err))
-	}
-
-	document.Set("processing_status", models.DocStatusProcessing)
-	if err := app.Save(document); err != nil {
-		return failJob(app, job, document, fmt.Errorf("mark document processing: %w", err))
-	}
-
-	jobCtx, jobCancel := context.WithTimeout(context.Background(), cfg.WorkerTimeout)
-	defer jobCancel()
-
-	var ocrText string
-	var mimeType string
-	switch jobType {
-	case models.JobTypeExtraction:
-		ocrText = strings.TrimSpace(document.GetString("ocr_text"))
-		if ocrText == "" {
-			return failJob(app, job, document, fmt.Errorf("extraction reprocess requires existing ocr_text"))
-		}
-		log.Printf("[worker] job=%s document=%s skipping OCR, reusing stored text (%d chars)",
-			job.Id, documentID, len(ocrText))
-	default:
-		tmpPath, mimeType, cleanup, err := readDocumentToTempFile(app, document)
-		if err != nil {
-			return failJob(app, job, document, fmt.Errorf("read document file: %w", err))
-		}
-		defer cleanup()
-
-		if err := attachPDFPreview(app, document, tmpPath, mimeType); err != nil {
-			log.Printf("[worker] job=%s document=%s preview failed: %v", job.Id, documentID, err)
-		}
-
-		ocrStart := time.Now()
-		ocrCtx, ocrCancel := context.WithTimeout(jobCtx, cfg.OCRTimeout)
-		ocrText, err = ocrProvider.ExtractText(ocrCtx, tmpPath, mimeType)
-		ocrCancel()
-		if err != nil {
-			return failJob(app, job, document, fmt.Errorf("ocr: %w", err))
-		}
-		log.Printf("[worker] job=%s document=%s OCR complete provider=%s mime=%s chars=%d duration=%s",
-			job.Id, documentID, ocrProvider.Name(), mimeType, len(ocrText), time.Since(ocrStart).Round(time.Millisecond))
-	}
-
-	log.Printf("[worker] job=%s document=%s starting AI extraction provider=%s model=%s ocr_chars=%d",
-		job.Id, documentID, aiExtractor.Name(), aiExtractor.Model(), len(ocrText))
-	aiStart := time.Now()
-	aiCtx, aiCancel := context.WithTimeout(jobCtx, cfg.OpenAITimeout)
-	metadata, err := aiExtractor.ExtractMetadata(aiCtx, ocrText)
-	aiCancel()
-	if err != nil {
-		log.Printf("[worker] job=%s document=%s AI extraction failed duration=%s: %v",
-			job.Id, documentID, time.Since(aiStart).Round(time.Millisecond), err)
-		retryCount := int(job.GetFloat("retry_count"))
-		if retryCount < cfg.WorkerMaxRetries {
-			log.Printf("[worker] job=%s document=%s scheduling retry %d/%d",
-				job.Id, documentID, retryCount+1, cfg.WorkerMaxRetries)
-			job.Set("retry_count", retryCount+1)
-			job.Set("status", models.JobStatusPending)
-			job.Set("error_message", err.Error())
-			document.Set("processing_status", models.DocStatusPending)
-			if saveErr := app.Save(document); saveErr != nil {
-				return saveErr
-			}
-			return app.Save(job)
-		}
-		return failJob(app, job, document, fmt.Errorf("ai extraction: %w", err))
-	}
-	log.Printf("[worker] job=%s document=%s AI extraction complete duration=%s confidence=%.2f title=%q type=%q tags=%d",
-		job.Id, documentID, time.Since(aiStart).Round(time.Millisecond), metadata.Confidence,
-		truncateForLog(metadata.Title, 80), truncateForLog(metadata.DocumentType, 40), len(metadata.Tags))
-
-	if jobType != models.JobTypeExtraction {
-		document.Set("ocr_text", ocrText)
-	}
-	applyExtractedMetadata(document, metadata, cfg.ProcessingResultLanguage)
-	if err := applyDocumentType(app, document, metadata, cfg.ProcessingResultLanguage); err != nil {
-		return failJob(app, job, document, fmt.Errorf("document type: %w", err))
-	}
-	log.Printf("[worker] job=%s document=%s document_type=%s",
-		job.Id, documentID, truncateForLog(document.GetString("document_type"), 40))
-	if err := applyCorrespondent(app, document, metadata, cfg.ProcessingResultLanguage); err != nil {
-		return failJob(app, job, document, fmt.Errorf("correspondent: %w", err))
-	}
-	log.Printf("[worker] job=%s document=%s correspondent=%s",
-		job.Id, documentID, truncateForLog(document.GetString("correspondent"), 40))
-	document.Set("confidence", metadata.Confidence)
-	document.Set("people_or_organizations", metadata.PeopleOrOrganizations)
-	document.Set("metadata_source", aiExtractor.Model())
-
-	if metadata.DocumentDate != "" {
-		document.Set("document_date", metadata.DocumentDate)
-	}
-
-	tagIDs, err := ensureTags(app, mergeTagNames(metadata.Tags, metadata.TagsTranslated))
-	if err != nil {
-		return failJob(app, job, document, fmt.Errorf("tags: %w", err))
-	}
-	document.Set("tags", tagIDs)
-	log.Printf("[worker] job=%s document=%s applied %d tags", job.Id, documentID, len(tagIDs))
-
-	status := models.DocStatusCompleted
-	jobStatus := models.JobStatusCompleted
-	if metadata.Confidence < 0.5 {
-		status = models.DocStatusNeedsReview
-		jobStatus = models.JobStatusNeedsReview
-	}
-
-	document.Set("processing_status", status)
-	if err := app.Save(document); err != nil {
-		return failJob(app, job, document, fmt.Errorf("save document: %w", err))
-	}
-
-	job.Set("status", jobStatus)
-	job.Set("finished_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
-	job.Set("error_message", "")
-	_ = mimeType
-
-	log.Printf("[worker] job=%s document=%s finished status=%s duration=%s",
-		job.Id, documentID, jobStatus, time.Since(jobStart).Round(time.Millisecond))
-	return app.Save(job)
-}
 
 func readDocumentToTempFile(app core.App, document *core.Record) (tmpPath, mimeType string, cleanup func(), err error) {
 	fileName := document.GetString("file")
@@ -197,25 +51,6 @@ func readDocumentToTempFile(app core.App, document *core.Record) (tmpPath, mimeT
 	}
 
 	return tmpPath, ocr.GuessMimeType(fileName), cleanup, nil
-}
-
-func attachPDFPreview(app core.App, document *core.Record, filePath, mimeType string) error {
-	if mimeType != "application/pdf" {
-		return nil
-	}
-
-	previewFile, err := preview.GenerateFirstPagePNG(filePath)
-	if err != nil {
-		return err
-	}
-
-	document.Set("preview", previewFile)
-	if err := app.Save(document); err != nil {
-		return fmt.Errorf("save preview: %w", err)
-	}
-
-	log.Printf("[worker] document=%s preview saved file=%q", document.Id, previewFile.Name)
-	return nil
 }
 
 func applyExtractedMetadata(document *core.Record, metadata *models.ExtractedMetadata, resultLanguage string) {
@@ -593,7 +428,6 @@ func failJob(app core.App, job *core.Record, document *core.Record, err error) e
 
 	job.Set("status", models.JobStatusFailed)
 	job.Set("finished_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
-	job.Set("error_message", truncateError(err.Error(), 1900))
 	if saveErr := app.Save(job); saveErr != nil {
 		return saveErr
 	}
@@ -621,4 +455,21 @@ func truncateForLog(s string, max int) string {
 		return s
 	}
 	return s[:max] + "…"
+}
+
+func stepsInclude(steps []string, name string) bool {
+	for _, step := range steps {
+		if step == name {
+			return true
+		}
+	}
+	return false
+}
+
+func finalizeDocumentWithoutApply(app core.App, document *core.Record, steps []string) error {
+	if stepsInclude(steps, models.StepApplyMetadata) {
+		return nil
+	}
+	document.Set("processing_status", models.DocStatusCompleted)
+	return app.Save(document)
 }

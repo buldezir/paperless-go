@@ -1,0 +1,181 @@
+package worker
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/pocketbase/pocketbase/core"
+	"paperless-go/backend/internal/ai"
+	"paperless-go/backend/internal/config"
+	"paperless-go/backend/internal/models"
+	"paperless-go/backend/internal/ocr"
+)
+
+type PipelineRunner struct {
+	App      core.App
+	Cfg      config.Config
+	OCR      ocr.Provider
+	AI       ai.Extractor
+	registry map[string]Step
+}
+
+func NewPipelineRunner(app core.App, cfg config.Config, ocrProvider ocr.Provider, aiExtractor ai.Extractor) *PipelineRunner {
+	return &PipelineRunner{
+		App:      app,
+		Cfg:      cfg,
+		OCR:      ocrProvider,
+		AI:       aiExtractor,
+		registry: buildRegistry(ocrProvider, aiExtractor),
+	}
+}
+
+func (r *PipelineRunner) Run(ctx context.Context, jobID string) error {
+	jobStart := time.Now()
+
+	job, err := r.App.FindRecordById("processing_jobs", jobID)
+	if err != nil {
+		return err
+	}
+	if job.GetString("status") != models.JobStatusRunning {
+		return nil
+	}
+
+	documentID := job.GetString("document")
+	steps, err := parseSteps(job)
+	if err != nil {
+		return failJob(r.App, job, nil, err)
+	}
+	if len(steps) == 0 {
+		return failJob(r.App, job, nil, fmt.Errorf("job has no steps"))
+	}
+
+	document, err := r.App.FindRecordById("documents", documentID)
+	if err != nil {
+		return failJob(r.App, job, nil, fmt.Errorf("load document: %w", err))
+	}
+
+	log.Printf("[worker] job=%s document=%s steps=%v starting", job.Id, documentID, steps)
+
+	runs, err := parseStepRuns(job)
+	if err != nil {
+		return failJob(r.App, job, document, err)
+	}
+	runs = syncStepRuns(steps, runs)
+	saveStepRuns(job, runs)
+
+	metadata, err := loadMetadataJSON(job)
+	if err != nil {
+		return failJob(r.App, job, document, err)
+	}
+
+	state := &StepState{
+		App:        r.App,
+		Cfg:        r.Cfg,
+		Job:        job,
+		Document:   document,
+		OCR:        r.OCR,
+		AI:         r.AI,
+		Metadata:   metadata,
+		ForceSteps: parseForceSteps(job),
+	}
+	defer func() {
+		if state.Cleanup != nil {
+			state.Cleanup()
+		}
+	}()
+
+	jobCtx, jobCancel := context.WithTimeout(ctx, r.Cfg.WorkerTimeout)
+	defer jobCancel()
+
+	for {
+		idx := nextRunnableIndex(runs)
+		if idx < 0 {
+			break
+		}
+
+		stepName := steps[idx]
+		step, ok := r.registry[stepName]
+		if !ok {
+			return r.failStep(job, document, runs, idx, fmt.Errorf("unknown step %q", stepName))
+		}
+
+		markStepRunning(&runs[idx])
+		setStepRunExecutionDetails(&runs[idx], state)
+		job.Set("current_step", stepName)
+		saveStepRuns(job, runs)
+		if err := r.App.Save(job); err != nil {
+			return err
+		}
+
+		skipped, err := step.ShouldSkip(state)
+		if err != nil {
+			return r.failStep(job, document, runs, idx, err)
+		}
+		if skipped {
+			markStepCompleted(&runs[idx], true)
+			saveStepRuns(job, runs)
+			if err := r.App.Save(job); err != nil {
+				return err
+			}
+			log.Printf("[worker] job=%s document=%s step=%s skipped", job.Id, documentID, stepName)
+			continue
+		}
+
+		log.Printf("[worker] job=%s document=%s step=%s attempt=%d running",
+			job.Id, documentID, stepName, runs[idx].Attempts)
+
+		if err := step.Run(jobCtx, state); err != nil {
+			return r.handleStepFailure(job, document, runs, idx, err)
+		}
+
+		markStepCompleted(&runs[idx], false)
+		saveStepRuns(job, runs)
+		if err := r.App.Save(job); err != nil {
+			return err
+		}
+		log.Printf("[worker] job=%s document=%s step=%s completed", job.Id, documentID, stepName)
+	}
+
+	if job.GetString("status") == models.JobStatusRunning {
+		job.Set("status", models.JobStatusCompleted)
+	}
+	job.Set("finished_at", time.Now().Format("2006-01-02 15:04:05.000Z"))
+	job.Set("current_step", "")
+
+	if err := finalizeDocumentWithoutApply(r.App, document, steps); err != nil {
+		return err
+	}
+
+	log.Printf("[worker] job=%s document=%s finished status=%s duration=%s",
+		job.Id, documentID, job.GetString("status"), time.Since(jobStart).Round(time.Millisecond))
+	return r.App.Save(job)
+}
+
+func (r *PipelineRunner) failStep(job, document *core.Record, runs []models.StepRun, idx int, err error) error {
+	markStepFailed(&runs[idx], err)
+	saveStepRuns(job, runs)
+	job.Set("current_step", runs[idx].Name)
+	_ = r.App.Save(job)
+	return failJob(r.App, job, document, err)
+}
+
+func (r *PipelineRunner) handleStepFailure(job, document *core.Record, runs []models.StepRun, idx int, err error) error {
+	markStepFailed(&runs[idx], err)
+	saveStepRuns(job, runs)
+	job.Set("current_step", runs[idx].Name)
+
+	if runs[idx].Attempts < r.Cfg.WorkerMaxRetries {
+		log.Printf("[worker] job=%s document=%s step=%s scheduling retry %d/%d",
+			job.Id, document.Id, runs[idx].Name, runs[idx].Attempts, r.Cfg.WorkerMaxRetries)
+		job.Set("status", models.JobStatusPending)
+		document.Set("processing_status", models.DocStatusPending)
+		if saveErr := r.App.Save(document); saveErr != nil {
+			return saveErr
+		}
+		return r.App.Save(job)
+	}
+
+	return failJob(r.App, job, document, err)
+}

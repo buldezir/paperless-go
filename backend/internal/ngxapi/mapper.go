@@ -1,6 +1,7 @@
 package ngxapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -142,7 +143,7 @@ func taskResultMessage(app core.App, job *core.Record, status, docID string) str
 		ngxDocID := toNgxID(docID)
 		return fmt.Sprintf("Success. New document id %d created", ngxDocID)
 	case "FAILURE":
-		msg := job.GetString("error_message")
+		msg := latestStepError(job)
 		if msg == "" {
 			msg = "Processing failed"
 		}
@@ -152,6 +153,37 @@ func taskResultMessage(app core.App, job *core.Record, status, docID string) str
 	default:
 		return "Waiting for consumption"
 	}
+}
+
+type mappedStepRun struct {
+	Name  string `json:"name"`
+	Error string `json:"error"`
+}
+
+func latestStepError(job *core.Record) string {
+	raw := job.Get("step_runs")
+	if raw == nil {
+		return ""
+	}
+
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return ""
+	}
+
+	var runs []mappedStepRun
+	if err := json.Unmarshal(data, &runs); err != nil {
+		return ""
+	}
+	for i := len(runs) - 1; i >= 0; i-- {
+		if msg := strings.TrimSpace(runs[i].Error); msg != "" {
+			if runs[i].Name != "" {
+				return fmt.Sprintf("%s: %s", runs[i].Name, msg)
+			}
+			return msg
+		}
+	}
+	return ""
 }
 
 func createdDateOnly(datetime string) string {
