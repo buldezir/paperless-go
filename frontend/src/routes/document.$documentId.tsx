@@ -1,7 +1,20 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import { ensureAuth, fileUrl, pb, reprocessDocument, reprocessStepsForPreset, type ReprocessPreset } from '../lib/pocketbase'
-import type { DocumentRecord, ProcessingJobRecord } from '../lib/pocketbase'
+import {
+  defaultReprocessSteps,
+  ensureAuth,
+  fileUrl,
+  forceStepsForReprocess,
+  FULL_PIPELINE_STEPS,
+  orderedProcessingSteps,
+  pb,
+  PROCESSING_STEP_DESCRIPTIONS,
+  PROCESSING_STEP_LABELS,
+  reprocessDocument,
+  type DocumentRecord,
+  type ProcessingJobRecord,
+  type ProcessingStep,
+} from '../lib/pocketbase'
 
 export function DocumentDetailPage() {
   const { documentId } = useParams({ from: '/document/$documentId' })
@@ -14,6 +27,7 @@ export function DocumentDetailPage() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
+  const [reprocessSteps, setReprocessSteps] = useState<ProcessingStep[]>([])
   const [showProcessingJob, setShowProcessingJob] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -70,27 +84,62 @@ export function DocumentDetailPage() {
     }
   }, [documentId])
 
+  useEffect(() => {
+    if (!document) {
+      return
+    }
+    setReprocessSteps(defaultReprocessSteps(Boolean(document.ocr_text?.trim())))
+  }, [document?.id, document?.ocr_text])
+
   const canReprocess =
     document?.processing_status !== 'processing' && document?.processing_status !== 'pending'
 
-  const canReprocessExtraction = canReprocess && Boolean(document?.ocr_text?.trim())
+  const hasOcrText = Boolean(document?.ocr_text?.trim())
 
-  function requestReprocess(preset: ReprocessPreset) {
+  function toggleReprocessStep(step: ProcessingStep) {
+    setReprocessSteps((current) => {
+      if (current.includes(step)) {
+        return current.filter((name) => name !== step)
+      }
+      return orderedProcessingSteps([...current, step])
+    })
+  }
+
+  function canSelectReprocessStep(step: ProcessingStep): boolean {
+    if (!canReprocess) {
+      return false
+    }
+    if (step === 'extract_metadata') {
+      return hasOcrText || reprocessSteps.includes('ocr')
+    }
+    return true
+  }
+
+  function onReprocessSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (!document || !canReprocess || reprocessSteps.length === 0) {
+      return
+    }
+    if (
+      reprocessSteps.includes('extract_metadata') &&
+      !hasOcrText &&
+      !reprocessSteps.includes('ocr')
+    ) {
+      setError('Extract metadata requires OCR text. Select OCR or run OCR first.')
+      return
+    }
+
+    const stepLabels = reprocessSteps.map((step) => PROCESSING_STEP_LABELS[step]).join(', ')
     const confirmed = window.confirm(
-      preset === 'full'
-        ? 'Run OCR and extraction again from the original file? Existing metadata may be overwritten.'
-        : 'Re-run extraction using the current OCR text? Existing metadata may be overwritten.',
+      `Re-run these steps?\n\n${stepLabels}\n\nExisting metadata may be overwritten.`,
     )
     if (confirmed) {
-      void onReprocess(preset)
+      void onReprocess()
     }
   }
 
-  async function onReprocess(preset: ReprocessPreset) {
-    if (!document || !canReprocess) {
-      return
-    }
-    if (preset === 'extraction' && !canReprocessExtraction) {
+  async function onReprocess() {
+    if (!document || !canReprocess || reprocessSteps.length === 0) {
       return
     }
 
@@ -99,12 +148,8 @@ export function DocumentDetailPage() {
       setMessage('')
       setError('')
 
-      const steps = reprocessStepsForPreset(preset)
-      const forceSteps =
-        preset === 'full'
-          ? (['preview', 'ocr', 'extract_metadata'] as const)
-          : (['extract_metadata'] as const)
-      await reprocessDocument(document.id, steps, [...forceSteps])
+      const steps = orderedProcessingSteps(reprocessSteps)
+      await reprocessDocument(document.id, steps, forceStepsForReprocess(steps))
 
       const doc = await pb.collection('documents').getOne<DocumentRecord>(document.id, {
         expand: 'tags,document_type,correspondent',
@@ -116,11 +161,7 @@ export function DocumentDetailPage() {
 
       setDocument(doc)
       setJob(jobs.items[0] ?? null)
-      setMessage(
-        preset === 'full'
-          ? 'Document queued for full reprocessing (with OCR).'
-          : 'Document queued for extraction reprocessing.',
-      )
+      setMessage(`Document queued for reprocessing (${steps.map((step) => PROCESSING_STEP_LABELS[step]).join(', ')}).`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reprocess document')
     } finally {
@@ -354,25 +395,60 @@ export function DocumentDetailPage() {
             ) : null}
           </dl>
 
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-200 pt-4">
+          <form
+            className="mt-4 flex flex-col gap-3 border-t border-stone-200 pt-4"
+            onSubmit={onReprocessSubmit}
+          >
+            <div>
+              <h4 className="text-sm font-semibold text-stone-950">Reprocess</h4>
+              <p className="mt-0.5 text-xs text-stone-500">
+                Choose which pipeline steps to run. Selected steps are forced to re-run even if
+                output already exists.
+              </p>
+            </div>
+            <fieldset className="flex flex-col gap-2" disabled={!canReprocess || reprocessing}>
+              {FULL_PIPELINE_STEPS.map((step) => {
+                const selectable = canSelectReprocessStep(step)
+                const checked = reprocessSteps.includes(step)
+                return (
+                  <label
+                    key={step}
+                    className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
+                      selectable
+                        ? 'border-stone-200 bg-white text-stone-700'
+                        : 'border-stone-100 bg-stone-100/80 text-stone-400'
+                    }`}
+                    title={
+                      step === 'extract_metadata' && !selectable
+                        ? 'OCR text required, or select OCR'
+                        : undefined
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={checked}
+                      disabled={!selectable}
+                      onChange={() => toggleReprocessStep(step)}
+                    />
+                    <span>
+                      <span className="font-medium">{PROCESSING_STEP_LABELS[step]}</span>
+                      <span className="mt-0.5 block text-xs font-normal text-stone-500">
+                        {PROCESSING_STEP_DESCRIPTIONS[step]}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </fieldset>
             <button
-              type="button"
-              onClick={() => requestReprocess('full')}
-              disabled={!canReprocess || reprocessing}
-              className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              type="submit"
+              disabled={!canReprocess || reprocessing || reprocessSteps.length === 0}
+              className="self-start rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
-              {reprocessing ? 'Reprocessing...' : 'Reprocess full (with OCR)'}
+              {reprocessing ? 'Reprocessing...' : 'Reprocess selected steps'}
             </button>
-            <button
-              type="button"
-              onClick={() => requestReprocess('extraction')}
-              disabled={!canReprocessExtraction || reprocessing}
-              title={!canReprocessExtraction ? 'OCR text required' : undefined}
-              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-            >
-              {reprocessing ? 'Reprocessing...' : 'Reprocess extraction'}
-            </button>
-          </div>
+          </form>
         </div>
       )}
 

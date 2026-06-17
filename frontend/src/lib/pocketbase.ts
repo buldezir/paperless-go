@@ -75,6 +75,33 @@ export const FULL_PIPELINE_STEPS: ProcessingStep[] = [
 
 export const EXTRACTION_PIPELINE_STEPS: ProcessingStep[] = ['extract_metadata', 'apply_metadata']
 
+export const PROCESSING_STEP_LABELS: Record<ProcessingStep, string> = {
+  preview: 'Preview',
+  ocr: 'OCR',
+  extract_metadata: 'Extract metadata',
+  apply_metadata: 'Apply metadata',
+}
+
+export const PROCESSING_STEP_DESCRIPTIONS: Record<ProcessingStep, string> = {
+  preview: 'Regenerate the first-page preview image (PDF only)',
+  ocr: 'Re-run text extraction on the original file',
+  extract_metadata: 'Re-run AI metadata extraction from OCR text',
+  apply_metadata: 'Write extracted metadata onto the document',
+}
+
+export function orderedProcessingSteps(selected: Iterable<ProcessingStep>): ProcessingStep[] {
+  const chosen = new Set(selected)
+  return FULL_PIPELINE_STEPS.filter((step) => chosen.has(step))
+}
+
+export function forceStepsForReprocess(steps: ProcessingStep[]): ProcessingStep[] {
+  return steps.filter((step) => step !== 'apply_metadata')
+}
+
+export function defaultReprocessSteps(hasOcrText: boolean): ProcessingStep[] {
+  return hasOcrText ? [...EXTRACTION_PIPELINE_STEPS] : [...FULL_PIPELINE_STEPS]
+}
+
 export type ProcessingJobRecord = {
   id: string
   document: string
@@ -87,8 +114,6 @@ export type ProcessingJobRecord = {
   created: string
   updated: string
 }
-
-export type ReprocessPreset = 'full' | 'extraction'
 
 export type ChatMessage = {
   role: 'user' | 'assistant'
@@ -109,10 +134,6 @@ export type OCRTestResult = {
 
 export function fileUrl(record: DocumentRecord, filename?: string) {
   return pb.files.getURL(record, filename ?? record.file)
-}
-
-export function reprocessStepsForPreset(preset: ReprocessPreset): ProcessingStep[] {
-  return preset === 'full' ? [...FULL_PIPELINE_STEPS] : [...EXTRACTION_PIPELINE_STEPS]
 }
 
 export async function reprocessDocument(
