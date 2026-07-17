@@ -1,0 +1,429 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/shared"
+)
+
+const (
+	SearchModeShallow SearchMode = "shallow"
+	SearchModeDeep    SearchMode = "deep"
+
+	maxShallowToolRounds = 1
+	maxDeepToolRounds    = 4
+)
+
+type SearchMode string
+
+type DocumentHit struct {
+	ID            string   `json:"id"`
+	Title         string   `json:"title"`
+	DocumentDate  string   `json:"document_date,omitempty"`
+	Summary       string   `json:"summary,omitempty"`
+	OCRSnippet    string   `json:"ocr_snippet,omitempty"`
+	DocumentType  string   `json:"document_type,omitempty"`
+	Correspondent string   `json:"correspondent,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+}
+
+type SearchDocumentsArgs struct {
+	Query         string `json:"query"`
+	DateFrom      string `json:"date_from,omitempty"`
+	DateTo        string `json:"date_to,omitempty"`
+	DocumentType  string `json:"document_type,omitempty"`
+	Correspondent string `json:"correspondent,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
+}
+
+// DocumentSearcher runs a user-scoped keyword search against the document archive.
+type DocumentSearcher func(ctx context.Context, args SearchDocumentsArgs) ([]DocumentHit, error)
+
+type SearchAgent interface {
+	Search(ctx context.Context, messages []ChatMessage, mode SearchMode, search DocumentSearcher) (reply string, hits []DocumentHit, err error)
+}
+
+type openAISearchAgent struct {
+	client         *OpenAIClient
+	languages      string
+	resultLanguage string
+}
+
+func NewSearchAgent(apiKey, model, baseURL string, timeout time.Duration, languages, resultLanguage string, logger *slog.Logger) SearchAgent {
+	return &openAISearchAgent{
+		client:         NewOpenAIClient(apiKey, model, baseURL, "", "", timeout, logger),
+		languages:      strings.TrimSpace(languages),
+		resultLanguage: strings.TrimSpace(resultLanguage),
+	}
+}
+
+func (a *openAISearchAgent) Search(ctx context.Context, messages []ChatMessage, mode SearchMode, search DocumentSearcher) (string, []DocumentHit, error) {
+	if a.client.apiKey == "" {
+		return "", nil, fmt.Errorf("OPENAI_API_KEY is not configured")
+	}
+	if search == nil {
+		return "", nil, fmt.Errorf("document searcher is required")
+	}
+	if mode != SearchModeDeep {
+		mode = SearchModeShallow
+	}
+
+	maxRounds := maxShallowToolRounds
+	if mode == SearchModeDeep {
+		maxRounds = maxDeepToolRounds
+	}
+
+	apiMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+1+maxRounds*4)
+	apiMessages = append(apiMessages, openai.SystemMessage(buildSearchSystemPrompt(a.languages, a.resultLanguage, mode)))
+	for _, msg := range messages {
+		role := strings.TrimSpace(msg.Role)
+		content := strings.TrimSpace(msg.Content)
+		if role == "" || content == "" {
+			continue
+		}
+		if role != "user" && role != "assistant" {
+			return "", nil, fmt.Errorf("invalid message role: %s", role)
+		}
+		if role == "user" {
+			apiMessages = append(apiMessages, openai.UserMessage(content))
+		} else {
+			apiMessages = append(apiMessages, openai.AssistantMessage(content))
+		}
+	}
+	if len(apiMessages) < 2 {
+		return "", nil, fmt.Errorf("at least one user message is required")
+	}
+
+	tools := searchDocumentsTools()
+	allHits := make([]DocumentHit, 0)
+	seenIDs := map[string]struct{}{}
+
+	for round := 0; round <= maxRounds; round++ {
+		allowTools := round < maxRounds
+		params := openai.ChatCompletionNewParams{
+			Model:       shared.ChatModel(a.client.model),
+			Messages:    apiMessages,
+			Temperature: openai.Float(0.2),
+		}
+		if allowTools {
+			params.Tools = tools
+			params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+				OfAuto: openai.String("auto"),
+			}
+		} else {
+			params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+				OfAuto: openai.String("none"),
+			}
+		}
+
+		requestStart := time.Now()
+		a.client.logger.Info("search agent completion",
+			"model", a.client.model,
+			"mode", mode,
+			"round", round,
+			"allow_tools", allowTools,
+			"messages", len(apiMessages),
+		)
+		chatResp, err := a.client.client.Chat.Completions.New(ctx, params)
+		if err != nil {
+			a.client.logger.Error("search agent request failed",
+				"duration", time.Since(requestStart).Round(time.Millisecond),
+				slog.Any("error", err),
+			)
+			return "", nil, fmt.Errorf("openai search completion: %w", err)
+		}
+		a.client.logger.Info("search agent response",
+			"choices", len(chatResp.Choices),
+			"duration", time.Since(requestStart).Round(time.Millisecond),
+		)
+		if len(chatResp.Choices) == 0 {
+			return "", nil, fmt.Errorf("openai returned no choices")
+		}
+
+		msg := chatResp.Choices[0].Message
+		nativeCalls := msg.ToolCalls
+		dsmlCalls := []parsedToolCall(nil)
+		if len(nativeCalls) == 0 {
+			dsmlCalls = parseDSMLToolCalls(msg.Content)
+		}
+
+		hasToolCalls := len(nativeCalls) > 0 || len(dsmlCalls) > 0
+
+		// Final round, or model produced a plain answer: return user-facing text only.
+		if !allowTools || !hasToolCalls {
+			a.client.logger.Info("search agent finalizing",
+				"allow_tools", allowTools,
+				"dsml", contentHasDSMLToolCalls(msg.Content),
+				"content_chars", len(msg.Content),
+				"hits", len(allHits),
+			)
+			reply := finalizeSearchReply(msg.Content, allHits)
+			// If the model ignored "no tools" and emitted DSML again, force one more
+			// answer-only turn when we still have search hits to ground it.
+			if !allowTools && contentHasDSMLToolCalls(msg.Content) && round == maxRounds {
+				forced, forcedHits, err := a.forceFinalAnswer(ctx, apiMessages, allHits)
+				if err == nil && strings.TrimSpace(forced) != "" && !replyLooksLikeToolMarkup(forced) {
+					return forced, forcedHits, nil
+				}
+			}
+			return reply, allHits, nil
+		}
+
+		results := make([]toolExecResult, 0)
+
+		if len(nativeCalls) > 0 {
+			apiMessages = append(apiMessages, msg.ToParam())
+			for _, call := range nativeCalls {
+				result := a.executeToolCall(ctx, search, call.ID, call.Function.Name, call.Function.Arguments, &allHits, seenIDs)
+				results = append(results, result)
+				apiMessages = append(apiMessages, openai.ToolMessage(result.Content, call.ID))
+			}
+		} else {
+			// DSML models put tool calls in content; feed results back as a user message.
+			apiMessages = append(apiMessages, openai.AssistantMessage(msg.Content))
+			for _, call := range dsmlCalls {
+				result := a.executeToolCall(ctx, search, call.ID, call.Name, call.Arguments, &allHits, seenIDs)
+				results = append(results, result)
+			}
+			apiMessages = append(apiMessages, openai.UserMessage(formatDSMLToolResults(results)))
+		}
+	}
+
+	return finalizeSearchReply("", allHits), allHits, nil
+}
+
+func (a *openAISearchAgent) forceFinalAnswer(
+	ctx context.Context,
+	apiMessages []openai.ChatCompletionMessageParamUnion,
+	hits []DocumentHit,
+) (string, []DocumentHit, error) {
+	msgs := append([]openai.ChatCompletionMessageParamUnion{}, apiMessages...)
+	msgs = append(msgs, openai.UserMessage(
+		`Stop. Do not call any tools and do not output DSML/tool markup.
+Write the final answer for the user in natural language only, based on the tool results already provided.
+If nothing relevant was found, say so clearly.`,
+	))
+
+	requestStart := time.Now()
+	a.client.logger.Info("search agent forcing final answer",
+		"model", a.client.model,
+		"messages", len(msgs),
+	)
+	chatResp, err := a.client.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model:       shared.ChatModel(a.client.model),
+		Messages:    msgs,
+		Temperature: openai.Float(0.2),
+	})
+	if err != nil {
+		a.client.logger.Error("search agent force-final failed",
+			"duration", time.Since(requestStart).Round(time.Millisecond),
+			slog.Any("error", err),
+		)
+		return "", hits, err
+	}
+	if len(chatResp.Choices) == 0 {
+		return "", hits, fmt.Errorf("openai returned no choices")
+	}
+	return finalizeSearchReply(chatResp.Choices[0].Message.Content, hits), hits, nil
+}
+
+func finalizeSearchReply(content string, hits []DocumentHit) string {
+	reply := stripDSMLMarkup(strings.TrimSpace(content))
+	// Defense in depth: drop any leftover DSML-looking markup.
+	if contentHasDSMLToolCalls(reply) {
+		reply = stripDSMLMarkup(reply)
+	}
+	if contentHasDSMLToolCalls(reply) || replyLooksLikeToolMarkup(reply) {
+		reply = ""
+	}
+	if reply != "" {
+		return reply
+	}
+	return synthesizeSearchReply(hits)
+}
+
+func replyLooksLikeToolMarkup(s string) bool {
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, "search_documents") &&
+		(strings.Contains(lower, "invoke") || strings.Contains(lower, "tool_calls") || strings.Contains(lower, "dsml"))
+}
+
+func synthesizeSearchReply(hits []DocumentHit) string {
+	if len(hits) == 0 {
+		return "No matching documents were found. Try different keywords or enable Deep mode."
+	}
+	var b strings.Builder
+	b.WriteString("Here are the documents I found:\n\n")
+	for i, hit := range hits {
+		if i >= 10 {
+			b.WriteString(fmt.Sprintf("\n…and %d more.", len(hits)-10))
+			break
+		}
+		title := strings.TrimSpace(hit.Title)
+		if title == "" {
+			title = "Untitled document"
+		}
+		b.WriteString(fmt.Sprintf("- **%s**", title))
+		meta := make([]string, 0, 2)
+		if hit.DocumentDate != "" {
+			meta = append(meta, hit.DocumentDate)
+		}
+		if hit.DocumentType != "" {
+			meta = append(meta, hit.DocumentType)
+		}
+		if len(meta) > 0 {
+			b.WriteString(" (" + strings.Join(meta, " · ") + ")")
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (a *openAISearchAgent) executeToolCall(
+	ctx context.Context,
+	search DocumentSearcher,
+	callID, name, argumentsJSON string,
+	allHits *[]DocumentHit,
+	seenIDs map[string]struct{},
+) toolExecResult {
+	if name != "search_documents" {
+		return toolExecResult{
+			ID:      callID,
+			Name:    name,
+			Content: fmt.Sprintf(`{"error":"unknown tool: %s"}`, name),
+		}
+	}
+
+	var args SearchDocumentsArgs
+	if err := json.Unmarshal([]byte(argumentsJSON), &args); err != nil {
+		return toolExecResult{
+			ID:      callID,
+			Name:    name,
+			Content: `{"error":"invalid tool arguments"}`,
+		}
+	}
+
+	hits, err := search(ctx, args)
+	if err != nil {
+		return toolExecResult{
+			ID:      callID,
+			Name:    name,
+			Content: fmt.Sprintf(`{"error":%q}`, err.Error()),
+		}
+	}
+
+	for _, hit := range hits {
+		if hit.ID == "" {
+			continue
+		}
+		if _, ok := seenIDs[hit.ID]; ok {
+			continue
+		}
+		seenIDs[hit.ID] = struct{}{}
+		*allHits = append(*allHits, hit)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"count":     len(hits),
+		"documents": hits,
+	})
+	if err != nil {
+		return toolExecResult{
+			ID:      callID,
+			Name:    name,
+			Content: `{"error":"failed to encode search results"}`,
+		}
+	}
+	toolContent := string(payload)
+	if len(toolContent) > 24000 {
+		toolContent = toolContent[:24000] + "…"
+	}
+	return toolExecResult{ID: callID, Name: name, Content: toolContent}
+}
+
+func buildSearchSystemPrompt(languages, resultLanguage string, mode SearchMode) string {
+	var b strings.Builder
+	b.WriteString(`You help the user find documents in their personal archive.
+The user may ask in broad natural language that keyword search alone cannot handle.
+Use the search_documents tool to look up documents. Expand the request into concrete keywords and filters.
+Search bilingual metadata (title/purpose/summary and their *_original fields) plus OCR text.
+Prefer precise date_from/date_to, document_type, or correspondent filters when the query implies them.
+Cite real document ids and titles from tool results only. Never invent documents.
+If nothing relevant is found, say so clearly and suggest alternative search terms.
+Be concise. Answer in the same language as the user's latest message.
+Never output tool markup, DSML tags, or raw function-call XML in your final answer — only natural language.
+After you receive tool results, your next message must be the final answer for the user (no further tool calls).
+`)
+
+	if languages != "" {
+		b.WriteString(fmt.Sprintf(`
+Always try keyword searches across these archive languages (translate key terms as needed): %s.
+Call search_documents multiple times when useful — once per language or synonym set.
+`, languages))
+	} else {
+		b.WriteString(`
+No fixed deep-search language list is configured. Expand keywords into the language of the user's query`)
+		if resultLanguage != "" {
+			b.WriteString(fmt.Sprintf(` and into %s`, resultLanguage))
+		}
+		b.WriteString(`. Call search_documents multiple times when useful.
+`)
+	}
+
+	if mode == SearchModeDeep {
+		b.WriteString(`
+You are in deep search mode: you may refine and search again if the first results are weak or incomplete.
+`)
+	} else {
+		b.WriteString(`
+You are in shallow search mode: gather results with search_documents in one round, then answer.
+`)
+	}
+
+	return b.String()
+}
+
+func searchDocumentsTools() []openai.ChatCompletionToolParam {
+	return []openai.ChatCompletionToolParam{{
+		Function: shared.FunctionDefinitionParam{
+			Name:        "search_documents",
+			Description: openai.String("Search the user's document archive by keywords and optional filters. Returns matching documents with short snippets."),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "Keyword or short phrase to match against titles, summaries, and OCR text.",
+					},
+					"date_from": map[string]any{
+						"type":        "string",
+						"description": "Inclusive lower bound for document_date (YYYY-MM-DD).",
+					},
+					"date_to": map[string]any{
+						"type":        "string",
+						"description": "Inclusive upper bound for document_date (YYYY-MM-DD).",
+					},
+					"document_type": map[string]any{
+						"type":        "string",
+						"description": "Optional document type name filter (substring match).",
+					},
+					"correspondent": map[string]any{
+						"type":        "string",
+						"description": "Optional correspondent name filter (substring match).",
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Max results to return (1-20). Default 10.",
+					},
+				},
+				"required": []string{"query"},
+			},
+		},
+	}}
+}

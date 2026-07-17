@@ -23,9 +23,11 @@ type FormState = {
   mistral_api_base_url: string
   ocr_timeout_sec: string
   processing_result_language: string
+  deep_search_languages: string
   openai_api_key: string
   openai_model: string
   openai_chat_model: string
+  openai_search_model: string
   openai_base_url: string
   openai_timeout_sec: string
   worker_timeout_sec: string
@@ -42,9 +44,11 @@ function formFromSettings(settings: AppSettings): FormState {
     mistral_api_base_url: settings.mistral_api_base_url,
     ocr_timeout_sec: String(settings.ocr_timeout_sec),
     processing_result_language: settings.processing_result_language,
+    deep_search_languages: settings.deep_search_languages,
     openai_api_key: '',
     openai_model: settings.openai_model,
     openai_chat_model: settings.openai_chat_model,
+    openai_search_model: settings.openai_search_model,
     openai_base_url: settings.openai_base_url,
     openai_timeout_sec: String(settings.openai_timeout_sec),
     worker_timeout_sec: String(settings.worker_timeout_sec),
@@ -145,8 +149,10 @@ export function SettingsPage() {
         mistral_api_base_url: form.mistral_api_base_url,
         ocr_timeout_sec: ocrTimeout,
         processing_result_language: form.processing_result_language,
+        deep_search_languages: form.deep_search_languages,
         openai_model: form.openai_model,
         openai_chat_model: form.openai_chat_model,
+        openai_search_model: form.openai_search_model,
         openai_base_url: form.openai_base_url,
         openai_timeout_sec: openAITimeout,
         worker_timeout_sec: workerTimeout,
@@ -293,6 +299,15 @@ export function SettingsPage() {
               />
             </label>
             <label className={labelClassName}>
+              <span className={labelTextClassName}>Search model</span>
+              <input
+                className={inputClassName}
+                placeholder="Defaults to chat model"
+                value={form.openai_search_model}
+                onChange={(e) => updateField('openai_search_model', e.target.value)}
+              />
+            </label>
+            <label className={labelClassName}>
               <span className={labelTextClassName}>Base URL</span>
               <input
                 className={inputClassName}
@@ -317,6 +332,15 @@ export function SettingsPage() {
                 placeholder="e.g. en"
                 value={form.processing_result_language}
                 onChange={(e) => updateField('processing_result_language', e.target.value)}
+              />
+            </label>
+            <label className={labelClassName}>
+              <span className={labelTextClassName}>Deep search languages</span>
+              <input
+                className={inputClassName}
+                placeholder="e.g. de,en,uk"
+                value={form.deep_search_languages}
+                onChange={(e) => updateField('deep_search_languages', e.target.value)}
               />
             </label>
             <label className={labelClassName}>

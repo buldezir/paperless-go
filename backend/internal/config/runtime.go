@@ -11,10 +11,11 @@ import (
 
 // Snapshot is an immutable view of the live runtime config and clients.
 type Snapshot struct {
-	Cfg     Config
-	OCR     ocr.Provider
-	AI      ai.Extractor
-	Chatter ai.Chatter
+	Cfg         Config
+	OCR         ocr.Provider
+	AI          ai.Extractor
+	Chatter     ai.Chatter
+	SearchAgent ai.SearchAgent
 }
 
 // Runtime holds the process-global reloadable config and provider clients.
@@ -83,13 +84,23 @@ func (r *Runtime) apply(app core.App, cfg Config) {
 		cfg.OpenAITimeout,
 		aiLogger,
 	)
+	searchAgent := ai.NewSearchAgent(
+		cfg.OpenAIAPIKey,
+		cfg.OpenAISearchModel,
+		cfg.OpenAIBaseURL,
+		cfg.OpenAITimeout,
+		cfg.DeepSearchLanguages,
+		cfg.ProcessingResultLanguage,
+		aiLogger,
+	)
 
 	r.mu.Lock()
 	r.snap = Snapshot{
-		Cfg:     cfg,
-		OCR:     ocrProvider,
-		AI:      extractor,
-		Chatter: chatter,
+		Cfg:         cfg,
+		OCR:         ocrProvider,
+		AI:          extractor,
+		Chatter:     chatter,
+		SearchAgent: searchAgent,
 	}
 	r.mu.Unlock()
 
@@ -102,6 +113,8 @@ func (r *Runtime) apply(app core.App, cfg Config) {
 		"ai", extractor.Name(),
 		"model", extractor.Model(),
 		"chat_model", cfg.OpenAIChatModel,
+		"search_model", cfg.OpenAISearchModel,
+		"deep_search_languages", cfg.DeepSearchLanguages,
 	)
 }
 

@@ -5,6 +5,7 @@ import { UploadPage } from './routes/upload'
 import { DocumentDetailPage } from './routes/document.$documentId'
 import { DocumentAskPage } from './routes/document.$documentId.ask'
 import { OCRTestPage } from './routes/ocr-test'
+import { SearchPage } from './routes/search'
 import { SettingsPage } from './routes/settings'
 
 const rootRoute = createRootRoute({
@@ -21,6 +22,12 @@ const uploadRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/upload',
   component: UploadPage,
+})
+
+const searchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/search',
+  component: SearchPage,
 })
 
 const ocrTestRoute = createRoute({
@@ -50,6 +57,7 @@ const documentAskRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   uploadRoute,
+  searchRoute,
   ocrTestRoute,
   settingsRoute,
   documentRoute,

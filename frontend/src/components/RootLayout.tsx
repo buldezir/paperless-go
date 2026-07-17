@@ -124,6 +124,13 @@ export function RootLayout() {
                 Upload
               </Link>
               <Link
+                to="/search"
+                className={navLinkClass}
+                activeProps={{ className: `${navLinkClass} ${navLinkActiveClass}` }}
+              >
+                Deep Search
+              </Link>
+              <Link
                 to="/ocr-test"
                 className={navLinkClass}
                 activeProps={{ className: `${navLinkClass} ${navLinkActiveClass}` }}

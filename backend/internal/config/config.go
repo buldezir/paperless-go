@@ -23,9 +23,11 @@ type Config struct {
 	MistralAPIBaseURL        string
 	OCRTimeout               time.Duration
 	ProcessingResultLanguage string
+	DeepSearchLanguages      string
 	OpenAIAPIKey             string
 	OpenAIModel              string
 	OpenAIChatModel          string
+	OpenAISearchModel        string
 	OpenAIBaseURL            string
 	OpenAITimeout            time.Duration
 	WorkerCronExpr           string
@@ -45,6 +47,8 @@ func DefaultsFromEnv() Config {
 
 	openAIModel := getEnv("OPENAI_MODEL", "gpt-4o-mini")
 
+	chatModel := getEnv("OPENAI_CHAT_MODEL", openAIModel)
+
 	return Config{
 		OCRProvider:              getEnv("OCR_PROVIDER", "google_vision"),
 		GoogleVisionAPIKey:       os.Getenv("GOOGLE_VISION_API_KEY"),
@@ -53,9 +57,11 @@ func DefaultsFromEnv() Config {
 		MistralAPIBaseURL:        getEnv("MISTRAL_API_BASE_URL", "https://api.mistral.ai/v1"),
 		OCRTimeout:               time.Duration(ocrTimeoutSec) * time.Second,
 		ProcessingResultLanguage: strings.ToLower(strings.TrimSpace(os.Getenv("PROCESSING_RESULT_LANGUAGE"))),
+		DeepSearchLanguages:      normalizeLanguageList(os.Getenv("DEEP_SEARCH_LANGUAGES")),
 		OpenAIAPIKey:             os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:              openAIModel,
-		OpenAIChatModel:          getEnv("OPENAI_CHAT_MODEL", openAIModel),
+		OpenAIChatModel:          chatModel,
+		OpenAISearchModel:        getEnv("OPENAI_SEARCH_MODEL", chatModel),
 		OpenAIBaseURL:            getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAITimeout:            time.Duration(timeoutSec) * time.Second,
 		WorkerCronExpr:           WorkerCronFromEnv(),
@@ -85,9 +91,11 @@ func EnsureCollection(app core.App) (*core.Collection, error) {
 		&core.TextField{Name: "mistral_api_base_url", Max: 500},
 		&core.NumberField{Name: "ocr_timeout_sec", OnlyInt: true},
 		&core.TextField{Name: "processing_result_language", Max: 16},
+		&core.TextField{Name: "deep_search_languages", Max: 200},
 		&core.TextField{Name: "openai_api_key", Max: 2000},
 		&core.TextField{Name: "openai_model", Max: 200},
 		&core.TextField{Name: "openai_chat_model", Max: 200},
+		&core.TextField{Name: "openai_search_model", Max: 200},
 		&core.TextField{Name: "openai_base_url", Max: 500},
 		&core.NumberField{Name: "openai_timeout_sec", OnlyInt: true},
 		&core.NumberField{Name: "worker_timeout_sec", OnlyInt: true},
@@ -102,8 +110,33 @@ func EnsureCollection(app core.App) (*core.Collection, error) {
 	return settings, nil
 }
 
+// EnsureCollectionFields adds any missing app_settings fields (for upgrades).
+func EnsureCollectionFields(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId(CollectionName)
+	if err != nil {
+		return nil
+	}
+	changed := false
+	if collection.Fields.GetByName("deep_search_languages") == nil {
+		collection.Fields.Add(&core.TextField{Name: "deep_search_languages", Max: 200})
+		changed = true
+	}
+	if collection.Fields.GetByName("openai_search_model") == nil {
+		collection.Fields.Add(&core.TextField{Name: "openai_search_model", Max: 200})
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return app.Save(collection)
+}
+
 // EnsureDefaults creates the app_settings collection + singleton from env if missing.
 func EnsureDefaults(app core.App) error {
+	if err := EnsureCollectionFields(app); err != nil {
+		return err
+	}
+
 	if _, err := app.FindRecordById(CollectionName, SingletonID); err == nil {
 		return nil
 	}
@@ -155,6 +188,10 @@ func configFromRecord(record *core.Record) Config {
 	if chatModel == "" {
 		chatModel = openAIModel
 	}
+	searchModel := strings.TrimSpace(record.GetString("openai_search_model"))
+	if searchModel == "" {
+		searchModel = chatModel
+	}
 
 	ocrTimeoutSec := int(record.GetFloat("ocr_timeout_sec"))
 	if ocrTimeoutSec <= 0 {
@@ -182,9 +219,11 @@ func configFromRecord(record *core.Record) Config {
 		MistralAPIBaseURL:        firstNonEmpty(record.GetString("mistral_api_base_url"), "https://api.mistral.ai/v1"),
 		OCRTimeout:               time.Duration(ocrTimeoutSec) * time.Second,
 		ProcessingResultLanguage: strings.ToLower(strings.TrimSpace(record.GetString("processing_result_language"))),
+		DeepSearchLanguages:      normalizeLanguageList(record.GetString("deep_search_languages")),
 		OpenAIAPIKey:             record.GetString("openai_api_key"),
 		OpenAIModel:              openAIModel,
 		OpenAIChatModel:          chatModel,
+		OpenAISearchModel:        searchModel,
 		OpenAIBaseURL:            firstNonEmpty(record.GetString("openai_base_url"), "https://api.openai.com/v1"),
 		OpenAITimeout:            time.Duration(openAITimeoutSec) * time.Second,
 		WorkerCronExpr:           WorkerCronFromEnv(),
@@ -202,9 +241,11 @@ func applyConfigToRecord(record *core.Record, cfg Config) {
 	record.Set("mistral_api_base_url", cfg.MistralAPIBaseURL)
 	record.Set("ocr_timeout_sec", int(cfg.OCRTimeout.Seconds()))
 	record.Set("processing_result_language", cfg.ProcessingResultLanguage)
+	record.Set("deep_search_languages", cfg.DeepSearchLanguages)
 	record.Set("openai_api_key", cfg.OpenAIAPIKey)
 	record.Set("openai_model", cfg.OpenAIModel)
 	record.Set("openai_chat_model", cfg.OpenAIChatModel)
+	record.Set("openai_search_model", cfg.OpenAISearchModel)
 	record.Set("openai_base_url", cfg.OpenAIBaseURL)
 	record.Set("openai_timeout_sec", int(cfg.OpenAITimeout.Seconds()))
 	record.Set("worker_timeout_sec", int(cfg.WorkerTimeout.Seconds()))
@@ -226,4 +267,23 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// normalizeLanguageList cleans a comma-separated ISO 639-1 list (e.g. "de, en, uk").
+func normalizeLanguageList(raw string) string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		code := strings.ToLower(strings.TrimSpace(part))
+		if code == "" {
+			continue
+		}
+		if _, ok := seen[code]; ok {
+			continue
+		}
+		seen[code] = struct{}{}
+		out = append(out, code)
+	}
+	return strings.Join(out, ",")
 }

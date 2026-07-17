@@ -17,9 +17,11 @@ type settingsResponse struct {
 	MistralAPIBaseURL        string `json:"mistral_api_base_url"`
 	OCRTimeoutSec            int    `json:"ocr_timeout_sec"`
 	ProcessingResultLanguage string `json:"processing_result_language"`
+	DeepSearchLanguages      string `json:"deep_search_languages"`
 	OpenAIAPIKeySet          bool   `json:"openai_api_key_set"`
 	OpenAIModel              string `json:"openai_model"`
 	OpenAIChatModel          string `json:"openai_chat_model"`
+	OpenAISearchModel        string `json:"openai_search_model"`
 	OpenAIBaseURL            string `json:"openai_base_url"`
 	OpenAITimeoutSec         int    `json:"openai_timeout_sec"`
 	WorkerTimeoutSec         int    `json:"worker_timeout_sec"`
@@ -35,9 +37,11 @@ type settingsPatchRequest struct {
 	MistralAPIBaseURL        *string `json:"mistral_api_base_url"`
 	OCRTimeoutSec            *int    `json:"ocr_timeout_sec"`
 	ProcessingResultLanguage *string `json:"processing_result_language"`
+	DeepSearchLanguages      *string `json:"deep_search_languages"`
 	OpenAIAPIKey             *string `json:"openai_api_key"`
 	OpenAIModel              *string `json:"openai_model"`
 	OpenAIChatModel          *string `json:"openai_chat_model"`
+	OpenAISearchModel        *string `json:"openai_search_model"`
 	OpenAIBaseURL            *string `json:"openai_base_url"`
 	OpenAITimeoutSec         *int    `json:"openai_timeout_sec"`
 	WorkerTimeoutSec         *int    `json:"worker_timeout_sec"`
@@ -96,9 +100,11 @@ func settingsResponseFromConfig(cfg config.Config) settingsResponse {
 		MistralAPIBaseURL:        cfg.MistralAPIBaseURL,
 		OCRTimeoutSec:            int(cfg.OCRTimeout.Seconds()),
 		ProcessingResultLanguage: cfg.ProcessingResultLanguage,
+		DeepSearchLanguages:      cfg.DeepSearchLanguages,
 		OpenAIAPIKeySet:          cfg.OpenAIAPIKey != "",
 		OpenAIModel:              cfg.OpenAIModel,
 		OpenAIChatModel:          cfg.OpenAIChatModel,
+		OpenAISearchModel:        cfg.OpenAISearchModel,
 		OpenAIBaseURL:            cfg.OpenAIBaseURL,
 		OpenAITimeoutSec:         int(cfg.OpenAITimeout.Seconds()),
 		WorkerTimeoutSec:         int(cfg.WorkerTimeout.Seconds()),
@@ -136,6 +142,9 @@ func applySettingsPatch(record *core.Record, req settingsPatchRequest) error {
 	if req.ProcessingResultLanguage != nil {
 		record.Set("processing_result_language", strings.ToLower(strings.TrimSpace(*req.ProcessingResultLanguage)))
 	}
+	if req.DeepSearchLanguages != nil {
+		record.Set("deep_search_languages", normalizeDeepSearchLanguages(*req.DeepSearchLanguages))
+	}
 	if req.OpenAIAPIKey != nil && strings.TrimSpace(*req.OpenAIAPIKey) != "" {
 		record.Set("openai_api_key", strings.TrimSpace(*req.OpenAIAPIKey))
 	}
@@ -144,6 +153,9 @@ func applySettingsPatch(record *core.Record, req settingsPatchRequest) error {
 	}
 	if req.OpenAIChatModel != nil {
 		record.Set("openai_chat_model", strings.TrimSpace(*req.OpenAIChatModel))
+	}
+	if req.OpenAISearchModel != nil {
+		record.Set("openai_search_model", strings.TrimSpace(*req.OpenAISearchModel))
 	}
 	if req.OpenAIBaseURL != nil {
 		record.Set("openai_base_url", strings.TrimSpace(*req.OpenAIBaseURL))
@@ -177,3 +189,21 @@ type settingsError string
 func (e settingsError) Error() string { return string(e) }
 
 func errInvalid(msg string) error { return settingsError(msg) }
+
+func normalizeDeepSearchLanguages(raw string) string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		code := strings.ToLower(strings.TrimSpace(part))
+		if code == "" {
+			continue
+		}
+		if _, ok := seen[code]; ok {
+			continue
+		}
+		seen[code] = struct{}{}
+		out = append(out, code)
+	}
+	return strings.Join(out, ",")
+}

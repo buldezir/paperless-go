@@ -14,6 +14,7 @@ The API has been tested with the [swift-paperless](https://github.com/paulgessin
 - **Frontend:** React, TanStack Router, PocketBase JS SDK
 - **OCR:** Google Cloud Vision (`google_vision`) or Mistral AI OCR (`mistral`), configured in Settings
 - **AI:** OpenAI-compatible chat completions via the official OpenAI Go SDK
+- **Deep Search:** natural-language archive search via a tool-calling agent (keyword expansion across configured languages)
 
 ## Project layout
 
@@ -49,6 +50,7 @@ See [docs/development.md](docs/development.md) for the full list.
 - OCR text extraction
 - AI metadata extraction: title, purpose, date, type, tags, summary
 - Document list with search and status filters
+- Deep Search chat (`/search`) with optional multi-step refine mode
 - Detail page for reviewing OCR text and correcting metadata
 - Superuser Settings page for runtime OCR/AI/worker config
 

@@ -175,6 +175,48 @@ export async function chatWithDocument(documentId: string, messages: ChatMessage
   return data.message
 }
 
+export type SearchDocumentHit = {
+  id: string
+  title: string
+  document_date?: string
+  summary?: string
+  ocr_snippet?: string
+  document_type?: string
+  correspondent?: string
+  tags?: string[]
+}
+
+export type SearchMode = 'shallow' | 'deep'
+
+export async function deepSearch(messages: ChatMessage[], mode: SearchMode = 'shallow') {
+  await ensureAuth()
+
+  const response = await fetch(`${pbUrl}/api/app/search`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: pb.authStore.token,
+    },
+    body: JSON.stringify({ messages, mode }),
+  })
+
+  const data = (await response.json()) as {
+    message?: ChatMessage
+    documents?: SearchDocumentHit[]
+    detail?: string
+  }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Failed to run deep search')
+  }
+  if (!data.message) {
+    throw new Error('AI response was empty')
+  }
+  return {
+    message: data.message,
+    documents: data.documents ?? [],
+  }
+}
+
 export async function listOCRProviders() {
   await ensureAuth()
 
@@ -261,9 +303,11 @@ export type AppSettings = {
   mistral_api_base_url: string
   ocr_timeout_sec: number
   processing_result_language: string
+  deep_search_languages: string
   openai_api_key_set: boolean
   openai_model: string
   openai_chat_model: string
+  openai_search_model: string
   openai_base_url: string
   openai_timeout_sec: number
   worker_timeout_sec: number
@@ -279,9 +323,11 @@ export type AppSettingsPatch = {
   mistral_api_base_url?: string
   ocr_timeout_sec?: number
   processing_result_language?: string
+  deep_search_languages?: string
   openai_api_key?: string
   openai_model?: string
   openai_chat_model?: string
+  openai_search_model?: string
   openai_base_url?: string
   openai_timeout_sec?: number
   worker_timeout_sec?: number

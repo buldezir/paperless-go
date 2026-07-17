@@ -70,8 +70,10 @@ These seed `app_settings` when the singleton record does not exist yet. After th
 | `OPENAI_API_KEY` | empty | OpenAI-compatible API key |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Model ID for metadata extraction |
 | `OPENAI_CHAT_MODEL` | `OPENAI_MODEL` | Optional model ID for document chat |
+| `OPENAI_SEARCH_MODEL` | `OPENAI_CHAT_MODEL` | Optional model ID for Deep Search |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
 | `OPENAI_TIMEOUT_SEC` | `60` | AI request timeout |
+| `DEEP_SEARCH_LANGUAGES` | empty | Comma-separated ISO 639-1 codes (e.g. `de,en,uk`) for Deep Search keyword expansion |
 | `WORKER_TIMEOUT_SEC` | `300` | Per-job processing timeout |
 | `WORKER_MAX_RETRIES` | `0` | Max step retry attempts before a job fails |
 | `EXTRACTION_PROMPT_VERSION` | `v1` | Stored on each processing job step run |
@@ -99,7 +101,9 @@ Cron jobs are visible and manually triggerable in PocketBase Admin → Settings 
 
 Prefer **Settings** in the UI (superuser). For a fresh install you can also put `OPENAI_API_KEY` (and optional model/base URL) in `.env` so they seed `app_settings` on first boot.
 
-Without an API key, AI extraction and document chat return a configuration error.
+Without an API key, AI extraction, document chat, and Deep Search return a configuration error.
+
+Deep Search (`/search`) uses a tool-calling agent over keyword search. Configure **Search model** and **Deep search languages** in Settings.
 
 ## OCR setup
 
