@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet } from '@tanstack/react-router'
-import { ensureAuth, getUserDisplayName, logout, pb, pbAdminUrl } from '../lib/pocketbase'
+import {
+  ensureAuth,
+  getUserDisplayName,
+  isSuperuser,
+  logout,
+  pb,
+  pbAdminUrl,
+} from '../lib/pocketbase'
 import { LoginPage } from './LoginPage'
 
 const navLinkClass =
@@ -31,6 +38,7 @@ function LogoutIcon() {
 
 export function RootLayout() {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading')
+  const [superuser, setSuperuser] = useState(false)
   const userDisplayName = authState === 'authenticated' ? getUserDisplayName() : ''
 
   useEffect(() => {
@@ -41,10 +49,12 @@ export function RootLayout() {
         await ensureAuth()
         if (active) {
           setAuthState('authenticated')
+          setSuperuser(isSuperuser())
         }
       } catch {
         if (active) {
           setAuthState('unauthenticated')
+          setSuperuser(false)
         }
       }
     }
@@ -63,6 +73,7 @@ export function RootLayout() {
 
     return pb.authStore.onChange(() => {
       setAuthState(pb.authStore.isValid ? 'authenticated' : 'unauthenticated')
+      setSuperuser(isSuperuser())
     })
   }, [authState])
 
@@ -75,7 +86,14 @@ export function RootLayout() {
   }
 
   if (authState === 'unauthenticated') {
-    return <LoginPage onSuccess={() => setAuthState('authenticated')} />
+    return (
+      <LoginPage
+        onSuccess={() => {
+          setAuthState('authenticated')
+          setSuperuser(isSuperuser())
+        }}
+      />
+    )
   }
 
   return (
@@ -112,6 +130,15 @@ export function RootLayout() {
               >
                 OCR test
               </Link>
+              {superuser && (
+                <Link
+                  to="/settings"
+                  className={navLinkClass}
+                  activeProps={{ className: `${navLinkClass} ${navLinkActiveClass}` }}
+                >
+                  Settings
+                </Link>
+              )}
               <a
                 href={pbAdminUrl}
                 target="_blank"

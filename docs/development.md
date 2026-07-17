@@ -25,8 +25,11 @@ go run . serve --http=127.0.0.1:8090
 On first run, migrations create:
 
 - `tags`
+- `correspondents`
+- `document_types`
 - `documents`
 - `processing_jobs`
+- `app_settings` (singleton; seeded from `.env` on first boot)
 
 ### 2. Start React frontend
 
@@ -36,38 +39,50 @@ npm install
 npm run dev
 ```
 
-The frontend auto-registers and logs in a dev user on first load.
+The frontend auto-logs in a regular `users` account when `VITE_DEV_*` is set.
 
 ## Environment variables
 
 All variables live in `.env` at the project root (see `.env.example`).
 
-### Backend
+### Always env-backed
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `WORKER_CRON_EXPR` | `* * * * *` | Cron expression for sweeping stuck pending jobs (registered once at startup) |
+| `VITE_POCKETBASE_URL` | `http://127.0.0.1:8090` | PocketBase API URL (frontend) |
+| `VITE_DEV_USER_EMAIL` | — | Dev auto-login email (`users` collection) |
+| `VITE_DEV_USER_PASSWORD` | — | Dev auto-login password |
+
+### Seed-only (first boot → Settings)
+
+These seed `app_settings` when the singleton record does not exist yet. After that, edit them in the app **Settings** page (requires a PocketBase superuser login). Changing `.env` alone will not update a running install.
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `OCR_PROVIDER` | `google_vision` | OCR provider (`google_vision`, `mistral`) |
-| `GOOGLE_VISION_API_KEY` | empty | Google Cloud Vision API key (required when `OCR_PROVIDER=google_vision`) |
-| `MISTRAL_API_KEY` | empty | Mistral API key (required when `OCR_PROVIDER=mistral`) |
+| `GOOGLE_VISION_API_KEY` | empty | Google Cloud Vision API key |
+| `MISTRAL_API_KEY` | empty | Mistral API key |
 | `MISTRAL_OCR_MODEL` | `mistral-ocr-latest` | Mistral OCR model |
 | `MISTRAL_API_BASE_URL` | `https://api.mistral.ai/v1` | Mistral API base URL |
-| `PROCESSING_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, `purpose`, and `document_type` are stored in this language; originals go in `*_original` fields. Tags and document types are created in both languages when a translation is available. |
+| `OCR_TIMEOUT_SEC` | `40` | OCR request timeout |
+| `PROCESSING_RESULT_LANGUAGE` | empty | ISO 639-1 code (e.g. `en`, `de`). When set, `title`, `summary`, `purpose`, and `document_type` are stored in this language; originals go in `*_original` fields. |
 | `OPENAI_API_KEY` | empty | OpenAI-compatible API key |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Model ID for metadata extraction |
 | `OPENAI_CHAT_MODEL` | `OPENAI_MODEL` | Optional model ID for document chat |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
 | `OPENAI_TIMEOUT_SEC` | `60` | AI request timeout |
-| `WORKER_CRON_EXPR` | `* * * * *` | Cron expression for sweeping stuck pending jobs (minute granularity; new jobs dispatch immediately via hooks) |
-| `WORKER_MAX_RETRIES` | `3` | Max AI retry attempts per job |
-| `EXTRACTION_PROMPT_VERSION` | `v1` | Stored on each processing job |
+| `WORKER_TIMEOUT_SEC` | `300` | Per-job processing timeout |
+| `WORKER_MAX_RETRIES` | `0` | Max step retry attempts before a job fails |
+| `EXTRACTION_PROMPT_VERSION` | `v1` | Stored on each processing job step run |
 
-### Frontend
+## Settings (admin UI)
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `VITE_POCKETBASE_URL` | `http://127.0.0.1:8090` | PocketBase API URL |
-| `VITE_DEV_USER_EMAIL` | `dev@paperless.local` | Dev auth email |
-| `VITE_DEV_USER_PASSWORD` | `devpassword123` | Dev auth password |
+1. Create a PocketBase superuser if you do not have one yet (installer UI on first run, or `go run . superuser upsert EMAIL PASS` from `backend/`).
+2. Sign out of the app if you are logged in as a regular user, then sign in with the **superuser** email/password (login tries `users`, then `_superusers`).
+3. Open **Settings** in the nav. Changes save to `app_settings` and hot-reload the in-process OCR/AI clients (no restart).
+
+`WORKER_CRON_EXPR` is not editable there; change `.env` and restart, or use PocketBase Admin → Settings → Crons.
 
 ## Processing flow
 
@@ -82,24 +97,17 @@ Cron jobs are visible and manually triggerable in PocketBase Admin → Settings 
 
 ## OpenAI setup
 
-1. Create an API key for OpenAI or another OpenAI-compatible provider.
-2. Set `OPENAI_API_KEY` in `.env`.
-3. Optionally change `OPENAI_MODEL`, `OPENAI_CHAT_MODEL`, or `OPENAI_BASE_URL`.
+Prefer **Settings** in the UI (superuser). For a fresh install you can also put `OPENAI_API_KEY` (and optional model/base URL) in `.env` so they seed `app_settings` on first boot.
 
 Without an API key, AI extraction and document chat return a configuration error.
 
 ## OCR setup
 
-Set `OCR_PROVIDER` to choose the provider. Each provider requires its own API key.
+Set the provider and API keys in **Settings** (or seed via `.env` on first boot).
 
 ### Google Cloud Vision
 
 Uses the official [Go client library](https://docs.cloud.google.com/vision/docs/detect-labels-image-client-libraries).
-
-```env
-OCR_PROVIDER=google_vision
-GOOGLE_VISION_API_KEY=your-google-api-key
-```
 
 - **Images** — `BatchAnnotateImages` with `DOCUMENT_TEXT_DETECTION` via `images:annotate`
 - **PDFs** — `BatchAnnotateFiles` via `files:annotate` (base64 upload, no Cloud Storage). Pages are processed in batches of up to 5 per request.
@@ -109,14 +117,6 @@ See [docs/google_vision.md](google_vision.md) for obtaining a Google API key.
 ### Mistral OCR
 
 Uses the [Mistral Document OCR API](https://docs.mistral.ai/en/studio-api/document-processing/basic_ocr). Local files are sent as base64 data URLs (up to 10 MB).
-
-```env
-OCR_PROVIDER=mistral
-MISTRAL_API_KEY=your-mistral-api-key
-# optional:
-# MISTRAL_OCR_MODEL=mistral-ocr-latest
-# MISTRAL_API_BASE_URL=https://api.mistral.ai/v1
-```
 
 - **PDFs and office documents** — `document_url` with a base64 data URL
 - **Images** — `image_url` with a base64 data URL
@@ -133,6 +133,9 @@ cd frontend && npm run build
 
 # Create a new migration
 cd backend && go run . migrate create "your_migration_name"
+
+# Create / update a PocketBase superuser
+cd backend && go run . superuser upsert admin@example.com 'your-password'
 ```
 
 ## Paperless-ngx API compatibility
@@ -156,6 +159,7 @@ API versions 9 and 10 are accepted via the `Accept` header (`application/json; v
 ## Troubleshooting
 
 - **Upload succeeds but stays pending:** ensure the backend server is running; the worker starts with `serve`.
-- **OCR fails:** verify the API key for your `OCR_PROVIDER` is set (`GOOGLE_VISION_API_KEY` or `MISTRAL_API_KEY`). For Google Vision, ensure the Vision API is enabled for your project.
-- **AI extraction fails:** verify `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and model name. Check the processing job error on the document detail page.
+- **OCR fails:** configure the OCR provider and API key in Settings (or seed `.env` before first boot). For Google Vision, ensure the Vision API is enabled for your project.
+- **AI extraction fails:** configure OpenAI settings in Settings. Check the processing job error on the document detail page.
+- **Settings page missing:** log in with a PocketBase `_superusers` account (not a regular `users` account).
 - **Auth errors in frontend:** delete PocketBase data dir (`backend/pb_data`) and restart to recreate collections, then reload the app.

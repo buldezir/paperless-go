@@ -37,19 +37,21 @@ func ocrProviderConfig(cfg config.Config) ocr.ProviderConfig {
 	}
 }
 
-func handleOCRProviders(cfg config.Config) func(*core.RequestEvent) error {
+func handleOCRProviders(rt *config.Runtime) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+		cfg := rt.Snapshot().Cfg
 		return writeJSON(e, 200, ocrProvidersResponse{
 			Providers: ocr.AvailableProviders(ocrProviderConfig(cfg)),
 		})
 	}
 }
 
-func handleOCRTest(app core.App, cfg config.Config) func(*core.RequestEvent) error {
-	providerCfg := ocrProviderConfig(cfg)
-	providerCfg.Logger = app.Logger().With("component", "ocr")
-
+func handleOCRTest(app core.App, rt *config.Runtime) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+		cfg := rt.Snapshot().Cfg
+		providerCfg := ocrProviderConfig(cfg)
+		providerCfg.Logger = app.Logger().With("component", "ocr")
+
 		if err := e.Request.ParseMultipartForm(ocrTestMaxFileBytes + (1 << 20)); err != nil {
 			return writeError(e, 400, "Invalid multipart form.")
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 	"paperless-go/backend/internal/ai"
+	"paperless-go/backend/internal/config"
 )
 
 type chatRequest struct {
@@ -18,7 +19,7 @@ type chatResponse struct {
 	Message ai.ChatMessage `json:"message"`
 }
 
-func handleDocumentChat(app core.App, chatter ai.Chatter) func(*core.RequestEvent) error {
+func handleDocumentChat(app core.App, rt *config.Runtime) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		documentID := strings.TrimSpace(e.Request.PathValue("documentId"))
 		if documentID == "" {
@@ -44,6 +45,11 @@ func handleDocumentChat(app core.App, chatter ai.Chatter) func(*core.RequestEven
 		}
 		if len(req.Messages) == 0 {
 			return writeError(e, http.StatusBadRequest, "At least one message is required.")
+		}
+
+		chatter := rt.Snapshot().Chatter
+		if chatter == nil {
+			return writeError(e, http.StatusServiceUnavailable, "AI chat is not configured; update Settings.")
 		}
 
 		reply, err := chatter.Chat(context.Background(), ocrText, req.Messages)

@@ -12,7 +12,7 @@ The API has been tested with the [swift-paperless](https://github.com/paulgessin
 
 - **Backend:** Go, [PocketBase as a framework](https://pocketbase.io/docs/use-as-framework/)
 - **Frontend:** React, TanStack Router, PocketBase JS SDK
-- **OCR:** Google Cloud Vision (`google_vision`) or Mistral AI OCR (`mistral`), selected via `OCR_PROVIDER`
+- **OCR:** Google Cloud Vision (`google_vision`) or Mistral AI OCR (`mistral`), configured in Settings
 - **AI:** OpenAI-compatible chat completions via the official OpenAI Go SDK
 
 ## Project layout
@@ -27,7 +27,7 @@ docs/       Development guide
 
 ```bash
 cp .env.example .env
-# Edit .env and set OCR provider keys and OPENAI_API_KEY
+# Optional: seed OCR/AI keys in .env for first boot (later edit via Settings)
 docker compose up --build
 ```
 
@@ -35,14 +35,12 @@ Open [http://127.0.0.1:8090](http://127.0.0.1:8090). Data is stored in a Docker 
 
 For local development without Docker, see [docs/development.md](docs/development.md).
 
-## Environment variables
+## Environment variables and Settings
 
 See [docs/development.md](docs/development.md) for the full list.
 
-Minimum for local dev:
-
-- Set `GOOGLE_VISION_API_KEY` (for `OCR_PROVIDER=google_vision`) or `MISTRAL_API_KEY` (for `OCR_PROVIDER=mistral`)
-- Set `OPENAI_API_KEY` to use AI extraction
+- `WORKER_CRON_EXPR` and frontend `VITE_*` vars stay in `.env`
+- OCR/AI keys, models, and worker timeouts live in the DB (`app_settings`); seed from `.env` on first boot, then edit in **Settings** as a PocketBase superuser
 
 ## Features
 
@@ -52,6 +50,7 @@ Minimum for local dev:
 - AI metadata extraction: title, purpose, date, type, tags, summary
 - Document list with search and status filters
 - Detail page for reviewing OCR text and correcting metadata
+- Superuser Settings page for runtime OCR/AI/worker config
 
 ## Tests
 

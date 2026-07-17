@@ -8,6 +8,7 @@ import (
 
 	"paperless-go/backend/internal/appapi"
 	"paperless-go/backend/internal/authguard"
+	"paperless-go/backend/internal/config"
 	"paperless-go/backend/internal/ngxapi"
 	"paperless-go/backend/internal/worker"
 
@@ -47,10 +48,13 @@ func main() {
 		Automigrate: osutils.IsProbablyGoRun(),
 	})
 
+	rt := config.NewRuntime()
+	config.RegisterHooks(app, rt)
+
 	authguard.Register(app)
-	appapi.Register(app)
+	appapi.Register(app, rt)
 	ngxapi.Register(app)
-	worker.Register(app)
+	worker.Register(app, rt)
 
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {

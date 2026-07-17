@@ -1,10 +1,18 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pocketbase/pocketbase/core"
+)
+
+const (
+	CollectionName = "app_settings"
+	SingletonID    = "appsettings0001" // must be 15 chars (PocketBase default id rules)
 )
 
 type Config struct {
@@ -26,7 +34,10 @@ type Config struct {
 	ExtractionPromptVer      string
 }
 
-func Load() Config {
+// DefaultsFromEnv builds a Config from environment variables (and code defaults).
+// Used to seed the DB singleton on first boot and as an in-memory fallback.
+// WorkerCronExpr always comes from env.
+func DefaultsFromEnv() Config {
 	timeoutSec, _ := strconv.Atoi(getEnv("OPENAI_TIMEOUT_SEC", "60"))
 	ocrTimeoutSec, _ := strconv.Atoi(getEnv("OCR_TIMEOUT_SEC", "40"))
 	workerTimeoutSec, _ := strconv.Atoi(getEnv("WORKER_TIMEOUT_SEC", "300"))
@@ -47,11 +58,158 @@ func Load() Config {
 		OpenAIChatModel:          getEnv("OPENAI_CHAT_MODEL", openAIModel),
 		OpenAIBaseURL:            getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAITimeout:            time.Duration(timeoutSec) * time.Second,
-		WorkerCronExpr:           getEnv("WORKER_CRON_EXPR", "* * * * *"),
+		WorkerCronExpr:           WorkerCronFromEnv(),
 		WorkerTimeout:            time.Duration(workerTimeoutSec) * time.Second,
 		WorkerMaxRetries:         maxRetries,
 		ExtractionPromptVer:      getEnv("EXTRACTION_PROMPT_VERSION", "v1"),
 	}
+}
+
+func WorkerCronFromEnv() string {
+	return getEnv("WORKER_CRON_EXPR", "* * * * *")
+}
+
+// EnsureCollection creates the app_settings collection if it does not exist yet.
+func EnsureCollection(app core.App) (*core.Collection, error) {
+	if collection, err := app.FindCollectionByNameOrId(CollectionName); err == nil {
+		return collection, nil
+	}
+
+	settings := core.NewBaseCollection(CollectionName)
+	// Locked down for regular users; superusers bypass rules.
+	settings.Fields.Add(
+		&core.TextField{Name: "ocr_provider", Max: 50},
+		&core.TextField{Name: "google_vision_api_key", Max: 2000},
+		&core.TextField{Name: "mistral_api_key", Max: 2000},
+		&core.TextField{Name: "mistral_ocr_model", Max: 200},
+		&core.TextField{Name: "mistral_api_base_url", Max: 500},
+		&core.NumberField{Name: "ocr_timeout_sec", OnlyInt: true},
+		&core.TextField{Name: "processing_result_language", Max: 16},
+		&core.TextField{Name: "openai_api_key", Max: 2000},
+		&core.TextField{Name: "openai_model", Max: 200},
+		&core.TextField{Name: "openai_chat_model", Max: 200},
+		&core.TextField{Name: "openai_base_url", Max: 500},
+		&core.NumberField{Name: "openai_timeout_sec", OnlyInt: true},
+		&core.NumberField{Name: "worker_timeout_sec", OnlyInt: true},
+		&core.NumberField{Name: "worker_max_retries", OnlyInt: true},
+		&core.TextField{Name: "extraction_prompt_version", Max: 50},
+		&core.AutodateField{Name: "created", OnCreate: true},
+		&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
+	)
+	if err := app.Save(settings); err != nil {
+		return nil, fmt.Errorf("create %s collection: %w", CollectionName, err)
+	}
+	return settings, nil
+}
+
+// EnsureDefaults creates the app_settings collection + singleton from env if missing.
+func EnsureDefaults(app core.App) error {
+	if _, err := app.FindRecordById(CollectionName, SingletonID); err == nil {
+		return nil
+	}
+
+	collection, err := EnsureCollection(app)
+	if err != nil {
+		return err
+	}
+
+	// Re-check after ensuring collection (race / concurrent bootstrap).
+	if _, err := app.FindRecordById(CollectionName, SingletonID); err == nil {
+		return nil
+	}
+
+	cfg := DefaultsFromEnv()
+	record := core.NewRecord(collection)
+	record.Id = SingletonID
+	record.MarkAsNew()
+	applyConfigToRecord(record, cfg)
+	if err := app.Save(record); err != nil {
+		return fmt.Errorf("seed %s: %w", CollectionName, err)
+	}
+	app.Logger().Info("seeded app_settings singleton from env defaults")
+	return nil
+}
+
+// Load reads runtime settings from the DB singleton. WorkerCronExpr is always from env.
+func Load(app core.App) (Config, error) {
+	record, err := app.FindRecordById(CollectionName, SingletonID)
+	if err != nil {
+		return Config{}, fmt.Errorf("load %s: %w", CollectionName, err)
+	}
+	return configFromRecord(record), nil
+}
+
+func FindSettingsRecord(app core.App) (*core.Record, error) {
+	if err := EnsureDefaults(app); err != nil {
+		return nil, err
+	}
+	return app.FindRecordById(CollectionName, SingletonID)
+}
+
+func configFromRecord(record *core.Record) Config {
+	openAIModel := strings.TrimSpace(record.GetString("openai_model"))
+	if openAIModel == "" {
+		openAIModel = "gpt-4o-mini"
+	}
+	chatModel := strings.TrimSpace(record.GetString("openai_chat_model"))
+	if chatModel == "" {
+		chatModel = openAIModel
+	}
+
+	ocrTimeoutSec := int(record.GetFloat("ocr_timeout_sec"))
+	if ocrTimeoutSec <= 0 {
+		ocrTimeoutSec = 40
+	}
+	openAITimeoutSec := int(record.GetFloat("openai_timeout_sec"))
+	if openAITimeoutSec <= 0 {
+		openAITimeoutSec = 60
+	}
+	workerTimeoutSec := int(record.GetFloat("worker_timeout_sec"))
+	if workerTimeoutSec <= 0 {
+		workerTimeoutSec = 300
+	}
+
+	ocrProvider := strings.TrimSpace(record.GetString("ocr_provider"))
+	if ocrProvider == "" {
+		ocrProvider = "google_vision"
+	}
+
+	return Config{
+		OCRProvider:              ocrProvider,
+		GoogleVisionAPIKey:       record.GetString("google_vision_api_key"),
+		MistralAPIKey:            record.GetString("mistral_api_key"),
+		MistralOCRModel:          firstNonEmpty(record.GetString("mistral_ocr_model"), "mistral-ocr-latest"),
+		MistralAPIBaseURL:        firstNonEmpty(record.GetString("mistral_api_base_url"), "https://api.mistral.ai/v1"),
+		OCRTimeout:               time.Duration(ocrTimeoutSec) * time.Second,
+		ProcessingResultLanguage: strings.ToLower(strings.TrimSpace(record.GetString("processing_result_language"))),
+		OpenAIAPIKey:             record.GetString("openai_api_key"),
+		OpenAIModel:              openAIModel,
+		OpenAIChatModel:          chatModel,
+		OpenAIBaseURL:            firstNonEmpty(record.GetString("openai_base_url"), "https://api.openai.com/v1"),
+		OpenAITimeout:            time.Duration(openAITimeoutSec) * time.Second,
+		WorkerCronExpr:           WorkerCronFromEnv(),
+		WorkerTimeout:            time.Duration(workerTimeoutSec) * time.Second,
+		WorkerMaxRetries:         int(record.GetFloat("worker_max_retries")),
+		ExtractionPromptVer:      firstNonEmpty(record.GetString("extraction_prompt_version"), "v1"),
+	}
+}
+
+func applyConfigToRecord(record *core.Record, cfg Config) {
+	record.Set("ocr_provider", cfg.OCRProvider)
+	record.Set("google_vision_api_key", cfg.GoogleVisionAPIKey)
+	record.Set("mistral_api_key", cfg.MistralAPIKey)
+	record.Set("mistral_ocr_model", cfg.MistralOCRModel)
+	record.Set("mistral_api_base_url", cfg.MistralAPIBaseURL)
+	record.Set("ocr_timeout_sec", int(cfg.OCRTimeout.Seconds()))
+	record.Set("processing_result_language", cfg.ProcessingResultLanguage)
+	record.Set("openai_api_key", cfg.OpenAIAPIKey)
+	record.Set("openai_model", cfg.OpenAIModel)
+	record.Set("openai_chat_model", cfg.OpenAIChatModel)
+	record.Set("openai_base_url", cfg.OpenAIBaseURL)
+	record.Set("openai_timeout_sec", int(cfg.OpenAITimeout.Seconds()))
+	record.Set("worker_timeout_sec", int(cfg.WorkerTimeout.Seconds()))
+	record.Set("worker_max_retries", cfg.WorkerMaxRetries)
+	record.Set("extraction_prompt_version", cfg.ExtractionPromptVer)
 }
 
 func getEnv(key, fallback string) string {
@@ -59,4 +217,13 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }

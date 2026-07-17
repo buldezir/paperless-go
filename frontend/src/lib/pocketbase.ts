@@ -227,7 +227,15 @@ export function hasDevCredentials() {
 }
 
 export async function loginWithPassword(email: string, password: string) {
-  await pb.collection('users').authWithPassword(email, password)
+  try {
+    await pb.collection('users').authWithPassword(email, password)
+  } catch {
+    await pb.collection('_superusers').authWithPassword(email, password)
+  }
+}
+
+export function isSuperuser() {
+  return pb.authStore.record?.collectionName === '_superusers'
 }
 
 export function logout() {
@@ -243,6 +251,77 @@ export function getUserDisplayName() {
   const name = typeof record.name === 'string' ? record.name.trim() : ''
   const email = typeof record.email === 'string' ? record.email.trim() : ''
   return name || email
+}
+
+export type AppSettings = {
+  ocr_provider: string
+  google_vision_api_key_set: boolean
+  mistral_api_key_set: boolean
+  mistral_ocr_model: string
+  mistral_api_base_url: string
+  ocr_timeout_sec: number
+  processing_result_language: string
+  openai_api_key_set: boolean
+  openai_model: string
+  openai_chat_model: string
+  openai_base_url: string
+  openai_timeout_sec: number
+  worker_timeout_sec: number
+  worker_max_retries: number
+  extraction_prompt_version: string
+}
+
+export type AppSettingsPatch = {
+  ocr_provider?: string
+  google_vision_api_key?: string
+  mistral_api_key?: string
+  mistral_ocr_model?: string
+  mistral_api_base_url?: string
+  ocr_timeout_sec?: number
+  processing_result_language?: string
+  openai_api_key?: string
+  openai_model?: string
+  openai_chat_model?: string
+  openai_base_url?: string
+  openai_timeout_sec?: number
+  worker_timeout_sec?: number
+  worker_max_retries?: number
+  extraction_prompt_version?: string
+}
+
+export async function getAppSettings() {
+  await ensureAuth()
+
+  const response = await fetch(`${pbUrl}/api/app/settings`, {
+    headers: {
+      Authorization: pb.authStore.token,
+    },
+  })
+
+  const data = (await response.json()) as AppSettings & { detail?: string }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Failed to load settings')
+  }
+  return data as AppSettings
+}
+
+export async function updateAppSettings(patch: AppSettingsPatch) {
+  await ensureAuth()
+
+  const response = await fetch(`${pbUrl}/api/app/settings`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: pb.authStore.token,
+    },
+    body: JSON.stringify(patch),
+  })
+
+  const data = (await response.json()) as AppSettings & { detail?: string }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Failed to save settings')
+  }
+  return data as AppSettings
 }
 
 export async function ensureAuth() {

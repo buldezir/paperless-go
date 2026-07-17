@@ -4,70 +4,35 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase/core"
-	"paperless-go/backend/internal/ai"
 	"paperless-go/backend/internal/config"
 	"paperless-go/backend/internal/models"
-	"paperless-go/backend/internal/ocr"
 )
 
 type Processor struct {
 	app        core.App
-	cfg        config.Config
-	ocr        ocr.Provider
-	ai         ai.Extractor
+	rt         *config.Runtime
 	processing sync.Mutex
 }
 
-func Register(app core.App) {
-	cfg := config.Load()
-	ocrLogger := app.Logger().With("component", "ocr")
-	ocrProvider, err := ocr.NewProvider(cfg.OCRProvider, ocr.ProviderConfig{
-		GoogleVisionAPIKey: cfg.GoogleVisionAPIKey,
-		MistralAPIKey:      cfg.MistralAPIKey,
-		MistralModel:       cfg.MistralOCRModel,
-		MistralBaseURL:     cfg.MistralAPIBaseURL,
-		OCRTimeout:         cfg.OCRTimeout,
-		Logger:             ocrLogger,
-	})
-	if err != nil {
-		app.Logger().Error("OCR provider init failed", slog.Any("error", err))
-		os.Exit(1)
-	}
-	aiExtractor := ai.NewExtractor(
-		cfg.OpenAIAPIKey,
-		cfg.OpenAIModel,
-		cfg.OpenAIBaseURL,
-		cfg.ExtractionPromptVer,
-		cfg.ProcessingResultLanguage,
-		cfg.OpenAITimeout,
-		app.Logger().With("component", "ai"),
-	)
-
+func Register(app core.App, rt *config.Runtime) {
 	p := &Processor{
 		app: app,
-		cfg: cfg,
-		ocr: ocrProvider,
-		ai:  aiExtractor,
+		rt:  rt,
 	}
 	p.registerHooks()
 
-	app.Cron().MustAdd("process_pending_jobs", cfg.WorkerCronExpr, func() {
+	cronExpr := config.WorkerCronFromEnv()
+	app.Cron().MustAdd("process_pending_jobs", cronExpr, func() {
 		if err := p.processNextPending(); err != nil {
 			app.Logger().Error("cron error", slog.Any("error", err))
 		}
 	})
 
-	app.Logger().Info("worker registered",
-		"cron", cfg.WorkerCronExpr,
-		"ocr", ocrProvider.Name(),
-		"ai", aiExtractor.Name(),
-		"model", aiExtractor.Model(),
-	)
+	app.Logger().Info("worker registered", "cron", cronExpr)
 }
 
 func (p *Processor) registerHooks() {
@@ -200,6 +165,14 @@ func (p *Processor) processNextPending() error {
 }
 
 func (p *Processor) runJob(jobID string) error {
+	snap := p.rt.Snapshot()
+	if snap.OCR == nil {
+		return fmt.Errorf("OCR provider is not configured; update Settings")
+	}
+	if snap.AI == nil {
+		return fmt.Errorf("AI extractor is not configured; update Settings")
+	}
+
 	claimed := false
 	err := p.app.RunInTransaction(func(txApp core.App) error {
 		job, err := txApp.FindRecordById("processing_jobs", jobID)
@@ -258,6 +231,6 @@ func (p *Processor) runJob(jobID string) error {
 		return nil
 	}
 
-	runner := NewPipelineRunner(p.app, p.cfg, p.ocr, p.ai)
+	runner := NewPipelineRunner(p.app, snap.Cfg, snap.OCR, snap.AI)
 	return runner.Run(context.Background(), jobID)
 }
