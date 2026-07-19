@@ -15,6 +15,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ .
+COPY docs/ /app/docs/
 RUN npm run build
 
 FROM alpine:3.21

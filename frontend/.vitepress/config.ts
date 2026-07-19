@@ -1,0 +1,45 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { defineConfig } from 'vitepress'
+
+const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const vuePkg = path.join(frontendRoot, 'node_modules/vue')
+
+export default defineConfig({
+  title: 'paperless-go',
+  description: 'Development and setup documentation',
+  srcDir: '../docs',
+  base: '/docs/',
+  outDir: '../public/docs',
+  // Repo path links (e.g. ../backend/...) are intentional; they are not docs pages.
+  ignoreDeadLinks: [/\.\.\//],
+  vite: {
+    resolve: {
+      alias: [
+        {
+          find: 'vue/server-renderer',
+          replacement: path.join(vuePkg, 'server-renderer/index.mjs'),
+        },
+        {
+          find: 'vue',
+          replacement: path.join(vuePkg, 'dist/vue.runtime.esm-bundler.js'),
+        },
+      ],
+    },
+  },
+  themeConfig: {
+    nav: [
+      { text: 'Development', link: '/development' },
+      { text: 'Google Vision', link: '/google_vision' },
+    ],
+    sidebar: [
+      {
+        text: 'Guides',
+        items: [
+          { text: 'Development', link: '/development' },
+          { text: 'Google Vision', link: '/google_vision' },
+        ],
+      },
+    ],
+  },
+})

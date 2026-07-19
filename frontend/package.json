@@ -4,13 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "concurrently -k -n app,docs -c yellow,cyan \"vite --host 127.0.0.1 --port 5173\" \"vitepress dev --host 127.0.0.1 --port 5174\"",
+    "build": "tsc -b && vite build && npm run docs:build",
     "lint": "eslint .",
     "preview": "vite preview",
     "build:e2e": "VITE_DEV_USER_EMAIL= VITE_DEV_USER_PASSWORD= VITE_POCKETBASE_URL= npm run build",
     "test:e2e": "npm run build:e2e && playwright test",
-    "test:e2e:ui": "npm run build:e2e && playwright test --ui"
+    "test:e2e:ui": "npm run build:e2e && playwright test --ui",
+    "docs:dev": "vitepress dev --host 127.0.0.1 --port 5174",
+    "docs:build": "vitepress build"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.1",
@@ -30,12 +32,15 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^10.0.3",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.40"
   }
 }

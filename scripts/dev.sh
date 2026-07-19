@@ -51,8 +51,8 @@ echo "Starting backend on http://127.0.0.1:8090"
   > >(prefix "backend" $'\033[36m') 2>&1 &
 BACKEND_PID=$!
 
-echo "Starting frontend on http://127.0.0.1:5173"
-(cd "$ROOT/frontend" && npm run dev -- --host 127.0.0.1 --port 5173) \
+echo "Starting frontend + docs on http://127.0.0.1:5173 and http://127.0.0.1:5174"
+(cd "$ROOT/frontend" && npm run dev) \
   > >(prefix "frontend" $'\033[33m') 2>&1 &
 FRONTEND_PID=$!
 
@@ -60,6 +60,7 @@ echo ""
 echo "Dev servers running. Press Ctrl+C to stop."
 echo "  Backend:  http://127.0.0.1:8090"
 echo "  Frontend: http://127.0.0.1:5173"
+echo "  Docs:     http://127.0.0.1:5174/docs/"
 echo ""
 
 while kill -0 "$BACKEND_PID" 2>/dev/null && kill -0 "$FRONTEND_PID" 2>/dev/null; do

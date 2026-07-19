@@ -39,6 +39,8 @@ npm install
 npm run dev
 ```
 
+This starts the app on `http://127.0.0.1:5173` and a VitePress preview of these docs on `http://127.0.0.1:5174/docs/`. After `npm run build`, the same docs are static files under `public/docs/` and available at `/docs/` when PocketBase serves `public/`.
+
 The frontend auto-logs in a regular `users` account when `VITE_DEV_*` is set.
 
 ## Environment variables
@@ -143,7 +145,7 @@ cd frontend && npx playwright install chromium
 # Full agent verification stack
 ./scripts/test-all.sh
 
-# Frontend production build (outputs to ../public for PocketBase to serve)
+# Frontend production build (SPA -> ../public, docs -> ../public/docs)
 cd frontend && npm run build
 
 # Create a new migration

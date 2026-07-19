@@ -2,6 +2,8 @@
 .env
 .env.local
 public/
+frontend/.vitepress/cache/
+frontend/.vitepress/dist/
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
