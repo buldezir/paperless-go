@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet } from '@tanstack/react-router'
 import {
+  accentContrastText,
   ensureAuth,
   getUserDisplayName,
   isSuperuser,
@@ -8,6 +9,7 @@ import {
   pb,
   pbAdminUrl,
 } from '../lib/pocketbase'
+import { useAppMeta } from '../hooks/useAppMeta'
 import { AppFooter } from './AppFooter'
 import { LoginPage } from './LoginPage'
 
@@ -40,7 +42,10 @@ function LogoutIcon() {
 export function RootLayout() {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading')
   const [superuser, setSuperuser] = useState(false)
+  const { appName, accent } = useAppMeta()
   const userDisplayName = authState === 'authenticated' ? getUserDisplayName() : ''
+  const appInitial = appName.trim().charAt(0).toUpperCase() || 'P'
+  const logoStyle = { backgroundColor: accent, color: accentContrastText(accent) }
 
   useEffect(() => {
     let active = true
@@ -89,6 +94,8 @@ export function RootLayout() {
   if (authState === 'unauthenticated') {
     return (
       <LoginPage
+        appName={appName}
+        accent={accent}
         onSuccess={() => {
           setAuthState('authenticated')
           setSuperuser(isSuperuser())
@@ -102,10 +109,13 @@ export function RootLayout() {
       <header className="border-b border-stone-200 bg-stone-50/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-2 font-semibold text-stone-950">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-900 text-sm text-white">
-              P
+            <span
+              className="flex h-7 w-7 items-center justify-center rounded-md text-sm"
+              style={logoStyle}
+            >
+              {appInitial}
             </span>
-            Paperless Go
+            {appName}
           </Link>
           <div className="flex items-center gap-4">
             <nav className="flex items-center gap-1">

@@ -140,6 +140,18 @@ func Start(opts Options) (*Harness, error) {
 		return nil, fmt.Errorf("bootstrap: %w", err)
 	}
 
+	settings := app.Settings()
+	settings.Meta.AppName = "Paperless Go"
+	if err := app.Save(settings); err != nil {
+		_ = app.ResetBootstrapState()
+		if listener != nil {
+			_ = listener.Close()
+		}
+		mocks.Close()
+		_ = os.RemoveAll(dataDir)
+		return nil, fmt.Errorf("save app settings: %w", err)
+	}
+
 	userID, err := createAuthRecord(app, "users", UserEmail, UserPassword)
 	if err != nil {
 		_ = app.ResetBootstrapState()

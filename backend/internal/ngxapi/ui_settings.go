@@ -2,6 +2,7 @@ package ngxapi
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -15,10 +16,10 @@ func handleUiSettings(e *core.RequestEvent) error {
 		e.Response.WriteHeader(http.StatusOK)
 		return nil
 	}
-	return writeJSON(e, http.StatusOK, mapUiSettings(e.Auth))
+	return writeJSON(e, http.StatusOK, mapUiSettings(e.App, e.Auth))
 }
 
-func mapUiSettings(user *core.Record) map[string]any {
+func mapUiSettings(app core.App, user *core.Record) map[string]any {
 	username := user.GetString("email")
 	if username == "" {
 		username = user.GetString("name")
@@ -43,15 +44,19 @@ func mapUiSettings(user *core.Record) map[string]any {
 
 	return map[string]any{
 		"user":        userObj,
-		"settings":    defaultUiSettings(),
+		"settings":    defaultUiSettings(app),
 		"permissions": defaultPermissions(),
 	}
 }
 
-func defaultUiSettings() map[string]any {
+func defaultUiSettings(app core.App) map[string]any {
+	appTitle := "Paperless Go"
+	if name := strings.TrimSpace(app.Settings().Meta.AppName); name != "" {
+		appTitle = name
+	}
 	return map[string]any{
 		"version":    ngxAppVersion,
-		"app_title":  "Paperless Go",
+		"app_title":  appTitle,
 		"app_logo":   nil,
 		"trash_delay": 30,
 		"email_enabled": false,

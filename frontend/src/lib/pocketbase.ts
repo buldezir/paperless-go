@@ -295,6 +295,45 @@ export function getUserDisplayName() {
   return name || email
 }
 
+export const DEFAULT_APP_NAME = 'Paperless Go'
+export const DEFAULT_ACCENT = '#111827'
+
+export type AppMeta = {
+  appName: string
+  accent: string
+}
+
+export async function getAppMeta(): Promise<AppMeta> {
+  try {
+    const response = await fetch(`${pbUrl}/api/app/meta`)
+    const data = (await response.json()) as { app_name?: string; accent?: string; detail?: string }
+    if (response.ok) {
+      const appName = typeof data.app_name === 'string' ? data.app_name.trim() : ''
+      const accent = typeof data.accent === 'string' ? data.accent.trim() : ''
+      return {
+        appName: appName || DEFAULT_APP_NAME,
+        accent: accent || DEFAULT_ACCENT,
+      }
+    }
+  } catch {
+    // Fall through to defaults.
+  }
+  return { appName: DEFAULT_APP_NAME, accent: DEFAULT_ACCENT }
+}
+
+/** Pick black or white text for contrast on an accent background. */
+export function accentContrastText(accent: string): string {
+  const hex = accent.trim().replace(/^#/, '')
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return '#ffffff'
+  }
+  const r = Number.parseInt(hex.slice(0, 2), 16)
+  const g = Number.parseInt(hex.slice(2, 4), 16)
+  const b = Number.parseInt(hex.slice(4, 6), 16)
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luma > 0.6 ? '#000000' : '#ffffff'
+}
+
 export type AppSettings = {
   ocr_provider: string
   google_vision_api_key_set: boolean

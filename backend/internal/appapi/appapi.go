@@ -11,6 +11,7 @@ func Register(app core.App, rt *config.Runtime) {
 		Priority: 45,
 		Func: func(e *core.ServeEvent) error {
 			g := e.Router.Group("/api/app")
+			g.GET("/meta", handleGetMeta(app))
 			g.POST("/documents/{documentId}/chat", bindAuth(handleDocumentChat(app, rt)))
 			g.POST("/search", bindAuth(handleDeepSearch(app, rt)))
 			g.GET("/ocr/providers", bindAuth(handleOCRProviders(rt)))
