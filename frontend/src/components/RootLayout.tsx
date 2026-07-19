@@ -8,6 +8,7 @@ import {
   pb,
   pbAdminUrl,
 } from '../lib/pocketbase'
+import { AppFooter } from './AppFooter'
 import { LoginPage } from './LoginPage'
 
 const navLinkClass =
@@ -97,7 +98,7 @@ export function RootLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-100 text-stone-900">
+    <div className="flex min-h-screen flex-col bg-stone-100 text-stone-900">
       <header className="border-b border-stone-200 bg-stone-50/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-2 font-semibold text-stone-950">
@@ -174,9 +175,10 @@ export function RootLayout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
         <Outlet />
       </main>
+      <AppFooter />
     </div>
   )
 }
