@@ -6,5 +6,6 @@
 **/.env.*
 **/node_modules
 backend/pb_data*
-docs
 *.md
+!docs/
+!docs/**

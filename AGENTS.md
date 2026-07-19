@@ -18,6 +18,16 @@ Do not claim the task is complete if any stage fails. Prefer the full script ove
 
 A task is incomplete until `./scripts/test-all.sh` passes and related tests reflect the new behavior.
 
+## Docker build (when available)
+
+If Docker is usable (`docker info` succeeds), also build the image after any build-related changes (Dockerfile, frontend/backend build scripts, Vite/VitePress config, `docs/` content that is compiled into the image, package lockfiles that affect `npm run build`, Go module files that affect `go build`, and similar):
+
+```bash
+docker info >/dev/null && docker build -t paperless-go:local .
+```
+
+Skip this only when `docker info` fails (daemon missing or unreachable). Do not claim build-related work is done if the Docker build fails.
+
 ## Tests must stay in sync
 
 When changing existing behavior:
