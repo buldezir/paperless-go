@@ -2,22 +2,15 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
-	"paperless-go/backend/internal/appapi"
-	"paperless-go/backend/internal/authguard"
+	"paperless-go/backend/internal/appwire"
 	"paperless-go/backend/internal/config"
-	"paperless-go/backend/internal/ngxapi"
-	"paperless-go/backend/internal/worker"
 
 	"github.com/joho/godotenv"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/apis"
-	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
-	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/osutils"
 
 	_ "paperless-go/backend/migrations"
@@ -49,23 +42,7 @@ func main() {
 	})
 
 	rt := config.NewRuntime()
-	config.RegisterHooks(app, rt)
-
-	authguard.Register(app)
-	appapi.Register(app, rt)
-	ngxapi.Register(app)
-	worker.Register(app, rt)
-
-	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
-		Func: func(e *core.ServeEvent) error {
-			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
-				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
-			}
-
-			return e.Next()
-		},
-		Priority: 999,
-	})
+	appwire.Register(app, rt, publicDir, indexFallback)
 
 	if err := app.Start(); err != nil {
 		log.Fatal(err)

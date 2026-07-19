@@ -57,6 +57,17 @@ See [docs/development.md](docs/development.md) for the full list.
 ## Tests
 
 ```bash
-cd backend && go test ./...
-cd frontend && npm run build
+# Unit only (fast)
+cd backend && go test $(go list ./... | grep -v /e2e) -count=1
+
+# API e2e (real PocketBase + mocked OCR/AI)
+cd backend && go test ./e2e/ -count=1 -timeout 10m
+
+# Browser e2e (builds SPA, starts e2e server with mocks, Playwright)
+cd frontend && npm run test:e2e
+
+# Full verification (agents)
+./scripts/test-all.sh
 ```
+
+First browser run may need Chromium: `cd frontend && npx playwright install chromium`.

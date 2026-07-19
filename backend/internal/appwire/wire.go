@@ -1,0 +1,37 @@
+package appwire
+
+import (
+	"net/http"
+	"os"
+
+	"paperless-go/backend/internal/appapi"
+	"paperless-go/backend/internal/authguard"
+	"paperless-go/backend/internal/config"
+	"paperless-go/backend/internal/ngxapi"
+	"paperless-go/backend/internal/worker"
+
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/apis"
+	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/hook"
+)
+
+// Register wires all application hooks, APIs, and the SPA static handler onto app.
+// publicDir is the directory containing the built frontend; indexFallback enables SPA routing.
+func Register(app *pocketbase.PocketBase, rt *config.Runtime, publicDir string, indexFallback bool) {
+	config.RegisterHooks(app, rt)
+	authguard.Register(app)
+	appapi.Register(app, rt)
+	ngxapi.Register(app)
+	worker.Register(app, rt)
+
+	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
+		Func: func(e *core.ServeEvent) error {
+			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
+				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
+			}
+			return e.Next()
+		},
+		Priority: 999,
+	})
+}

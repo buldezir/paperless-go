@@ -129,10 +129,21 @@ Uses the [Mistral Document OCR API](https://docs.mistral.ai/en/studio-api/docume
 ## Useful commands
 
 ```bash
-# Backend tests
-cd backend && go test ./...
+# Unit tests (exclude API e2e package)
+cd backend && go test $(go list ./... | grep -v /e2e) -count=1
 
-# Frontend build (outputs to ../public for PocketBase to serve)
+# API e2e — boots a temp PocketBase with mocked OCR/OpenAI
+cd backend && go test ./e2e/ -count=1 -timeout 10m
+
+# Browser e2e — builds SPA, starts cmd/e2eserver, runs Playwright
+cd frontend && npm run test:e2e
+# First time only:
+cd frontend && npx playwright install chromium
+
+# Full agent verification stack
+./scripts/test-all.sh
+
+# Frontend production build (outputs to ../public for PocketBase to serve)
 cd frontend && npm run build
 
 # Create a new migration
@@ -141,6 +152,13 @@ cd backend && go run . migrate create "your_migration_name"
 # Create / update a PocketBase superuser
 cd backend && go run . superuser upsert admin@example.com 'your-password'
 ```
+
+### E2E notes
+
+- API and browser e2e use **mocked** Mistral OCR and OpenAI-compatible APIs (no real keys).
+- Browser e2e serves the built SPA from `public/` on `http://127.0.0.1:18090` via [`backend/cmd/e2eserver`](../backend/cmd/e2eserver).
+- Seeded accounts: `e2e@paperless.local` / `e2epassword123` (user) and `admin@paperless.local` / `adminpassword123` (superuser).
+- `go test ./...` from `backend/` includes the e2e package.
 
 ## Paperless-ngx API compatibility
 

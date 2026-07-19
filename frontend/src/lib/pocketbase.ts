@@ -1,6 +1,6 @@
 import PocketBase from 'pocketbase'
 
-const pbUrl = import.meta.env.VITE_POCKETBASE_URL ?? document.location.origin
+const pbUrl = import.meta.env.VITE_POCKETBASE_URL || document.location.origin
 
 export const pb = new PocketBase(pbUrl)
 export const pbAdminUrl = `${pbUrl}/_/`

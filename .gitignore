@@ -2,3 +2,9 @@
 .env
 .env.local
 public/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+backend/pb_data/
+*.test
