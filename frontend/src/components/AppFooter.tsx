@@ -17,7 +17,7 @@ export function AppFooter() {
                     ·
                 </span>
                 <a
-                    href="https://github.com/buldezir/paperless-go/tree/main/docs"
+                    href="/docs"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Documentation"
