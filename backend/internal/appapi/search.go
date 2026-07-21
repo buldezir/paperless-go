@@ -41,12 +41,22 @@ func handleDeepSearch(app core.App, rt *config.Runtime) func(*core.RequestEvent)
 			return writeError(e, http.StatusServiceUnavailable, "AI search is not configured; update Settings.")
 		}
 
-		userID := e.Auth.Id
+		// Match homepage document listing: regular users are scoped to their own
+		// docs; superusers bypass ownership (PocketBase collection rules do the same).
+		userID := ""
+		if !e.HasSuperuserAuth() {
+			userID = e.Auth.Id
+		}
+		availableTags, err := listAvailableTagNames(app)
+		if err != nil {
+			return writeError(e, http.StatusInternalServerError, err.Error())
+		}
+
 		searcher := func(ctx context.Context, args ai.SearchDocumentsArgs) ([]ai.DocumentHit, error) {
 			return searchUserDocuments(app, userID, args)
 		}
 
-		reply, hits, err := agent.Search(context.Background(), req.Messages, mode, searcher)
+		reply, hits, err := agent.Search(context.Background(), req.Messages, mode, availableTags, searcher)
 		if err != nil {
 			return writeError(e, http.StatusInternalServerError, err.Error())
 		}

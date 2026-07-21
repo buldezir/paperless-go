@@ -34,19 +34,20 @@ type DocumentHit struct {
 }
 
 type SearchDocumentsArgs struct {
-	Query         string `json:"query"`
-	DateFrom      string `json:"date_from,omitempty"`
-	DateTo        string `json:"date_to,omitempty"`
-	DocumentType  string `json:"document_type,omitempty"`
-	Correspondent string `json:"correspondent,omitempty"`
-	Limit         int    `json:"limit,omitempty"`
+	Query         string   `json:"query"`
+	DateFrom      string   `json:"date_from,omitempty"`
+	DateTo        string   `json:"date_to,omitempty"`
+	DocumentType  string   `json:"document_type,omitempty"`
+	Correspondent string   `json:"correspondent,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	Limit         int      `json:"limit,omitempty"`
 }
 
 // DocumentSearcher runs a user-scoped keyword search against the document archive.
 type DocumentSearcher func(ctx context.Context, args SearchDocumentsArgs) ([]DocumentHit, error)
 
 type SearchAgent interface {
-	Search(ctx context.Context, messages []ChatMessage, mode SearchMode, search DocumentSearcher) (reply string, hits []DocumentHit, err error)
+	Search(ctx context.Context, messages []ChatMessage, mode SearchMode, availableTags []string, search DocumentSearcher) (reply string, hits []DocumentHit, err error)
 }
 
 type openAISearchAgent struct {
@@ -63,7 +64,7 @@ func NewSearchAgent(apiKey, model, baseURL string, timeout time.Duration, langua
 	}
 }
 
-func (a *openAISearchAgent) Search(ctx context.Context, messages []ChatMessage, mode SearchMode, search DocumentSearcher) (string, []DocumentHit, error) {
+func (a *openAISearchAgent) Search(ctx context.Context, messages []ChatMessage, mode SearchMode, availableTags []string, search DocumentSearcher) (string, []DocumentHit, error) {
 	if a.client.apiKey == "" {
 		return "", nil, fmt.Errorf("OPENAI_API_KEY is not configured")
 	}
@@ -80,7 +81,7 @@ func (a *openAISearchAgent) Search(ctx context.Context, messages []ChatMessage, 
 	}
 
 	apiMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+1+maxRounds*4)
-	apiMessages = append(apiMessages, openai.SystemMessage(buildSearchSystemPrompt(a.languages, a.resultLanguage, mode)))
+	apiMessages = append(apiMessages, openai.SystemMessage(buildSearchSystemPrompt(a.languages, a.resultLanguage, mode, availableTags)))
 	for _, msg := range messages {
 		role := strings.TrimSpace(msg.Role)
 		content := strings.TrimSpace(msg.Content)
@@ -347,19 +348,22 @@ func (a *openAISearchAgent) executeToolCall(
 	return toolExecResult{ID: callID, Name: name, Content: toolContent}
 }
 
-func buildSearchSystemPrompt(languages, resultLanguage string, mode SearchMode) string {
+func buildSearchSystemPrompt(languages, resultLanguage string, mode SearchMode, availableTags []string) string {
 	var b strings.Builder
 	b.WriteString(`You help the user find documents in their personal archive.
 The user may ask in broad natural language that keyword search alone cannot handle.
 Use the search_documents tool to look up documents. Expand the request into concrete keywords and filters.
 Search bilingual metadata (title/purpose/summary and their *_original fields) plus OCR text.
-Prefer precise date_from/date_to, document_type, or correspondent filters when the query implies them.
+Prefer precise date_from/date_to, document_type, correspondent, or tags filters when the query implies them.
+When filtering by tags, use exact names from the available archive tags list below — never invent tag names.
 Cite real document ids and titles from tool results only. Never invent documents.
 If nothing relevant is found, say so clearly and suggest alternative search terms.
 Be concise. Answer in the same language as the user's latest message.
 Never output tool markup, DSML tags, or raw function-call XML in your final answer — only natural language.
 After you receive tool results, your next message must be the final answer for the user (no further tool calls).
 `)
+
+	b.WriteString(formatAvailableTagsPrompt(availableTags))
 
 	if languages != "" {
 		b.WriteString(fmt.Sprintf(`
@@ -389,6 +393,31 @@ You are in shallow search mode: gather results with search_documents in one roun
 	return b.String()
 }
 
+func formatAvailableTagsPrompt(tags []string) string {
+	cleaned := make([]string, 0, len(tags))
+	seen := map[string]struct{}{}
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		key := strings.ToLower(tag)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, tag)
+	}
+	if len(cleaned) == 0 {
+		return `
+Available archive tags: none are defined yet. Do not pass a tags filter.
+`
+	}
+	return fmt.Sprintf(`
+Available archive tags (pass exact names via the tags filter when relevant): %s.
+`, strings.Join(cleaned, ", "))
+}
+
 func searchDocumentsTools() []openai.ChatCompletionToolParam {
 	return []openai.ChatCompletionToolParam{{
 		Function: shared.FunctionDefinitionParam{
@@ -416,6 +445,11 @@ func searchDocumentsTools() []openai.ChatCompletionToolParam {
 					"correspondent": map[string]any{
 						"type":        "string",
 						"description": "Optional correspondent name filter (substring match).",
+					},
+					"tags": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Optional tag name filters. Use exact names from the available archive tags list. Matches documents that have any of these tags.",
 					},
 					"limit": map[string]any{
 						"type":        "integer",

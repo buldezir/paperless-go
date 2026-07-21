@@ -32,11 +32,13 @@ func searchUserDocuments(app core.App, userID string, args ai.SearchDocumentsArg
 		limit = maxSearchLimit
 	}
 
-	filter := "user = {:userId}"
-	params := dbx.Params{"userId": userID}
+	filter := "(title ~ {:q} || title_original ~ {:q} || purpose ~ {:q} || purpose_original ~ {:q} || summary ~ {:q} || summary_original ~ {:q} || ocr_text ~ {:q})"
+	params := dbx.Params{"q": query}
 
-	filter += " && (title ~ {:q} || title_original ~ {:q} || purpose ~ {:q} || purpose_original ~ {:q} || summary ~ {:q} || summary_original ~ {:q} || ocr_text ~ {:q})"
-	params["q"] = query
+	if userID != "" {
+		filter = "user = {:userId} && " + filter
+		params["userId"] = userID
+	}
 
 	if dateFrom := strings.TrimSpace(args.DateFrom); dateFrom != "" {
 		filter += " && document_date >= {:dateFrom}"
@@ -69,6 +71,18 @@ func searchUserDocuments(app core.App, userID string, args ai.SearchDocumentsArg
 		}
 		filter += " && correspondent ?= {:corrIds}"
 		params["corrIds"] = corrIDs
+	}
+
+	if tagNames := normalizeTagNames(args.Tags); len(tagNames) > 0 {
+		tagIDs, err := findTagIDsByNames(app, tagNames)
+		if err != nil {
+			return nil, err
+		}
+		if len(tagIDs) == 0 {
+			return []ai.DocumentHit{}, nil
+		}
+		filter += " && tags.id ?= {:tagIds}"
+		params["tagIds"] = tagIDs
 	}
 
 	records, err := app.FindRecordsByFilter(
@@ -143,6 +157,85 @@ func findNamedEntityIDs(app core.App, collection, name string) ([]string, error)
 		ids = append(ids, record.Id)
 	}
 	return ids, nil
+}
+
+func listAvailableTagNames(app core.App) ([]string, error) {
+	records, err := app.FindRecordsByFilter("tags", "", "name", 500, 0)
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	names := make([]string, 0, len(records))
+	for _, record := range records {
+		if name := strings.TrimSpace(record.GetString("name")); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
+func findTagIDsByNames(app core.App, names []string) ([]string, error) {
+	ids := make([]string, 0, len(names))
+	seen := map[string]struct{}{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		records, err := app.FindRecordsByFilter(
+			"tags",
+			"name = {:name}",
+			"name",
+			5,
+			0,
+			dbx.Params{"name": name},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("lookup tags: %w", err)
+		}
+		if len(records) == 0 {
+			// Fall back to substring match so near-exact agent inputs still work.
+			records, err = app.FindRecordsByFilter(
+				"tags",
+				"name ~ {:name}",
+				"name",
+				5,
+				0,
+				dbx.Params{"name": name},
+			)
+			if err != nil {
+				return nil, fmt.Errorf("lookup tags: %w", err)
+			}
+		}
+		for _, record := range records {
+			if _, ok := seen[record.Id]; ok {
+				continue
+			}
+			seen[record.Id] = struct{}{}
+			ids = append(ids, record.Id)
+		}
+	}
+	return ids, nil
+}
+
+func normalizeTagNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	seen := map[string]struct{}{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, name)
+	}
+	return out
 }
 
 func ocrSnippet(ocrText, query string) string {

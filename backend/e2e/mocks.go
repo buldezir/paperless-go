@@ -87,6 +87,20 @@ func (m *mockServers) Close() {
 	}
 }
 
+func (m *mockServers) LastOpenAIBodies() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, len(m.lastBodies))
+	copy(out, m.lastBodies)
+	return out
+}
+
+func (m *mockServers) ResetOpenAIBodies() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lastBodies = nil
+}
+
 func (m *mockServers) openAIResponseFromBody(body string) map[string]any {
 	var req map[string]any
 	_ = json.Unmarshal([]byte(body), &req)
