@@ -28,11 +28,11 @@ docs/       Development guide
 
 ```bash
 cp .env.example .env
-# Optional: seed OCR/AI keys in .env for first boot (later edit via Settings)
+# Optional: seed OCR/AI keys in .env for first boot (skips those wizard steps)
 docker compose up --build
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090). Data is stored in a Docker volume (`app_data`).
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090). On first launch, the in-app setup wizard creates your admin account and collects OCR + OpenAI API keys (hard gate until both are set). Data is stored in a Docker volume (`app_data`).
 
 For local development without Docker, see [docs/development.md](docs/development.md).
 
@@ -41,7 +41,7 @@ For local development without Docker, see [docs/development.md](docs/development
 See [docs/development.md](docs/development.md) for the full list.
 
 - `WORKER_CRON_EXPR` and frontend `VITE_*` vars stay in `.env`
-- OCR/AI keys, models, and worker timeouts live in the DB (`app_settings`); seed from `.env` on first boot, then edit in **Settings** as a PocketBase superuser
+- OCR/AI keys, models, and worker timeouts live in the DB (`app_settings`); seed from `.env` on first boot, complete via the first-launch wizard, then edit in **Settings** as a PocketBase superuser
 
 ## Features
 
@@ -53,6 +53,7 @@ See [docs/development.md](docs/development.md) for the full list.
 - Deep Search chat (`/search`) with optional multi-step refine mode
 - Detail page for reviewing OCR text and correcting metadata
 - Superuser Settings page for runtime OCR/AI/worker config
+- First-launch setup wizard (admin account + required OCR/AI keys)
 
 ## Tests
 

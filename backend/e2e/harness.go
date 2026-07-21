@@ -54,6 +54,10 @@ type Options struct {
 	PublicDir string
 	// HTTPAddr forces a listen address (e.g. 127.0.0.1:8090). Empty uses an ephemeral port.
 	HTTPAddr string
+	// SkipAuthSeed skips creating the default e2e user and superuser.
+	SkipAuthSeed bool
+	// EmptyAPIKeys leaves OCR/AI API keys unset (for setup wizard tests).
+	EmptyAPIKeys bool
 }
 
 // Start boots a temporary PocketBase instance with mocks and seeded users.
@@ -80,10 +84,17 @@ func Start(opts Options) (*Harness, error) {
 
 	// Seed env before Runtime/bootstrap so app_settings and clients point at mocks.
 	_ = os.Setenv("OCR_PROVIDER", "mistral")
-	_ = os.Setenv("MISTRAL_API_KEY", "e2e-mistral-key")
+	if opts.EmptyAPIKeys {
+		_ = os.Unsetenv("MISTRAL_API_KEY")
+		_ = os.Unsetenv("OPENAI_API_KEY")
+		_ = os.Unsetenv("GOOGLE_VISION_API_KEY")
+	} else {
+		_ = os.Setenv("MISTRAL_API_KEY", "e2e-mistral-key")
+		_ = os.Setenv("OPENAI_API_KEY", "e2e-openai-key")
+		_ = os.Unsetenv("GOOGLE_VISION_API_KEY")
+	}
 	_ = os.Setenv("MISTRAL_API_BASE_URL", mocks.OCR.URL+"/v1")
 	_ = os.Setenv("MISTRAL_OCR_MODEL", "mistral-ocr-latest")
-	_ = os.Setenv("OPENAI_API_KEY", "e2e-openai-key")
 	_ = os.Setenv("OPENAI_BASE_URL", mocks.OpenAI.URL+"/v1")
 	_ = os.Setenv("OPENAI_MODEL", "e2e-mock")
 	_ = os.Setenv("OPENAI_CHAT_MODEL", "e2e-mock")
@@ -94,7 +105,6 @@ func Start(opts Options) (*Harness, error) {
 	_ = os.Setenv("WORKER_MAX_RETRIES", "0")
 	_ = os.Setenv("WORKER_CRON_EXPR", "0 0 1 1 *") // effectively never during short tests
 	_ = os.Setenv("DEEP_SEARCH_LANGUAGES", "en")
-	_ = os.Unsetenv("GOOGLE_VISION_API_KEY")
 	_ = os.Unsetenv("VITE_DEV_USER_EMAIL")
 	_ = os.Unsetenv("VITE_DEV_USER_PASSWORD")
 
@@ -152,25 +162,36 @@ func Start(opts Options) (*Harness, error) {
 		return nil, fmt.Errorf("save app settings: %w", err)
 	}
 
-	userID, err := createAuthRecord(app, "users", UserEmail, UserPassword)
-	if err != nil {
-		_ = app.ResetBootstrapState()
-		if listener != nil {
-			_ = listener.Close()
-		}
-		mocks.Close()
-		_ = os.RemoveAll(dataDir)
-		return nil, fmt.Errorf("create user: %w", err)
+	// EmptyAPIKeys only affects first-boot seed; restore mock keys so other harnesses
+	// in this process (e.g. shared) are not left without env fallbacks.
+	if opts.EmptyAPIKeys {
+		_ = os.Setenv("MISTRAL_API_KEY", "e2e-mistral-key")
+		_ = os.Setenv("OPENAI_API_KEY", "e2e-openai-key")
 	}
-	superID, err := createAuthRecord(app, core.CollectionNameSuperusers, SuperEmail, SuperPassword)
-	if err != nil {
-		_ = app.ResetBootstrapState()
-		if listener != nil {
-			_ = listener.Close()
+
+	var userID, superID string
+	if !opts.SkipAuthSeed {
+		var err error
+		userID, err = createAuthRecord(app, "users", UserEmail, UserPassword)
+		if err != nil {
+			_ = app.ResetBootstrapState()
+			if listener != nil {
+				_ = listener.Close()
+			}
+			mocks.Close()
+			_ = os.RemoveAll(dataDir)
+			return nil, fmt.Errorf("create user: %w", err)
 		}
-		mocks.Close()
-		_ = os.RemoveAll(dataDir)
-		return nil, fmt.Errorf("create superuser: %w", err)
+		superID, err = createAuthRecord(app, core.CollectionNameSuperusers, SuperEmail, SuperPassword)
+		if err != nil {
+			_ = app.ResetBootstrapState()
+			if listener != nil {
+				_ = listener.Close()
+			}
+			mocks.Close()
+			_ = os.RemoveAll(dataDir)
+			return nil, fmt.Errorf("create superuser: %w", err)
+		}
 	}
 
 	serveErr := make(chan error, 1)

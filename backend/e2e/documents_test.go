@@ -40,10 +40,15 @@ func TestDocumentsUploadListGetPatchDelete(t *testing.T) {
 		"purpose": "e2e patch",
 	})
 	requireStatus(t, status, http.StatusOK, raw)
-	doc = h.getDocument(t, token, id)
-	if jsonGetString(doc, "title") != "Manual Title" {
-		t.Fatalf("title=%q", doc["title"])
+	var patched map[string]any
+	if err := json.Unmarshal([]byte(raw), &patched); err != nil {
+		t.Fatalf("decode patch: %v", err)
 	}
+	if jsonGetString(patched, "title") != "Manual Title" {
+		t.Fatalf("title=%q", patched["title"])
+	}
+	doc = patched
+
 
 	// Download original file via PocketBase files API.
 	fileName := jsonGetString(doc, "file")

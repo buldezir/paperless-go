@@ -80,11 +80,20 @@ These seed `app_settings` when the singleton record does not exist yet. After th
 | `WORKER_MAX_RETRIES` | `0` | Max step retry attempts before a job fails |
 | `EXTRACTION_PROMPT_VERSION` | `v1` | Stored on each processing job step run |
 
+## First-launch setup wizard
+
+On a fresh install the SPA hard-gates until setup is complete:
+
+1. **Create admin** — email + password for the first PocketBase `_superusers` account (replaces PocketBase’s browser installer UI).
+2. **OCR** — provider + matching API key.
+3. **OpenAI** — API key for extraction, chat, and Deep Search.
+
+You can also create the admin via CLI (`go run . superuser upsert EMAIL PASS` from `backend/`) and/or seed OCR/AI keys in `.env` before first boot; the wizard skips steps that are already done. Until keys are present, regular users see a “setup incomplete” screen; only a superuser can finish configuration.
+
 ## Settings (admin UI)
 
-1. Create a PocketBase superuser if you do not have one yet (installer UI on first run, or `go run . superuser upsert EMAIL PASS` from `backend/`).
-2. Sign out of the app if you are logged in as a regular user, then sign in with the **superuser** email/password (login tries `users`, then `_superusers`).
-3. Open **Settings** in the nav. Changes save to `app_settings` and hot-reload the in-process OCR/AI clients (no restart).
+1. Sign in with a **superuser** email/password (login tries `users`, then `_superusers`).
+2. Open **Settings** in the nav. Changes save to `app_settings` and hot-reload the in-process OCR/AI clients (no restart).
 
 `WORKER_CRON_EXPR` is not editable there; change `.env` and restart, or use PocketBase Admin → Settings → Crons.
 
@@ -182,6 +191,7 @@ API versions 9 and 10 are accepted via the `Accept` header (`application/json; v
 
 ## Troubleshooting
 
+- **Stuck on setup wizard:** create the admin account and provide OCR + OpenAI API keys (or seed keys in `.env` before first boot / use `superuser upsert`). Clearing required keys later brings the config steps back for superusers.
 - **Upload succeeds but stays pending:** ensure the backend server is running; the worker starts with `serve`.
 - **OCR fails:** configure the OCR provider and API key in Settings (or seed `.env` before first boot). For Google Vision, ensure the Vision API is enabled for your project.
 - **AI extraction fails:** configure OpenAI settings in Settings. Check the processing job error on the document detail page.

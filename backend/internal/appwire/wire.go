@@ -25,6 +25,15 @@ func Register(app *pocketbase.PocketBase, rt *config.Runtime, publicDir string, 
 	ngxapi.Register(app)
 	worker.Register(app, rt)
 
+	// Prefer the in-app setup wizard over PocketBase's browser installer UI.
+	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
+		Priority: -10000,
+		Func: func(e *core.ServeEvent) error {
+			e.InstallerFunc = nil
+			return e.Next()
+		},
+	})
+
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {

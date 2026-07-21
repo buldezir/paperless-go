@@ -12,6 +12,8 @@ func Register(app core.App, rt *config.Runtime) {
 		Func: func(e *core.ServeEvent) error {
 			g := e.Router.Group("/api/app")
 			g.GET("/meta", handleGetMeta(app))
+			g.GET("/setup/status", handleGetSetupStatus(app, rt))
+			g.POST("/setup/admin", handlePostSetupAdmin(app))
 			g.POST("/documents/{documentId}/chat", bindAuth(handleDocumentChat(app, rt)))
 			g.POST("/search", bindAuth(handleDeepSearch(app, rt)))
 			g.GET("/ocr/providers", bindAuth(handleOCRProviders(rt)))

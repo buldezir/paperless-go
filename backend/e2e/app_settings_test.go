@@ -52,8 +52,8 @@ func TestAppSettingsSuperuserOnly(t *testing.T) {
 	}
 
 	status, raw = h.doJSON(t, http.MethodPatch, "/api/app/settings", superTok, map[string]any{
-		"openai_model":           "e2e-mock-updated",
-		"deep_search_languages":  "en,de",
+		"openai_model":               "e2e-mock-updated",
+		"deep_search_languages":      "en,de",
 		"processing_result_language": "en",
 	})
 	requireStatus(t, status, http.StatusOK, raw)
@@ -64,4 +64,12 @@ func TestAppSettingsSuperuserOnly(t *testing.T) {
 	if settings["openai_model"] != "e2e-mock-updated" {
 		t.Fatalf("openai_model not updated: %v", settings["openai_model"])
 	}
+
+	// Restore defaults so later shared-harness tests are not affected.
+	status, raw = h.doJSON(t, http.MethodPatch, "/api/app/settings", superTok, map[string]any{
+		"openai_model":               "e2e-mock",
+		"deep_search_languages":      "en",
+		"processing_result_language": "",
+	})
+	requireStatus(t, status, http.StatusOK, raw)
 }

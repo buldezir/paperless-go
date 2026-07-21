@@ -321,6 +321,37 @@ export async function getAppMeta(): Promise<AppMeta> {
   return { appName: DEFAULT_APP_NAME, accent: DEFAULT_ACCENT }
 }
 
+export type SetupStatus = {
+  needs_admin: boolean
+  needs_config: boolean
+  ocr_provider: string
+  google_vision_api_key_set: boolean
+  mistral_api_key_set: boolean
+  openai_api_key_set: boolean
+}
+
+export async function getSetupStatus(): Promise<SetupStatus> {
+  const response = await fetch(`${pbUrl}/api/app/setup/status`)
+  const data = (await response.json()) as SetupStatus & { detail?: string }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Failed to load setup status')
+  }
+  return data
+}
+
+export async function createSetupAdmin(email: string, password: string, passwordConfirm: string) {
+  const response = await fetch(`${pbUrl}/api/app/setup/admin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, passwordConfirm }),
+  })
+  const data = (await response.json()) as { email?: string; id?: string; detail?: string }
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Failed to create admin account')
+  }
+  return data
+}
+
 /** Pick black or white text for contrast on an accent background. */
 export function accentContrastText(accent: string): string {
   const hex = accent.trim().replace(/^#/, '')

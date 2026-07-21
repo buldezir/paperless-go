@@ -59,8 +59,8 @@ FRONTEND_PID=$!
 echo ""
 echo "Dev servers running. Press Ctrl+C to stop."
 echo "  Backend:  http://127.0.0.1:8090"
-echo "  Frontend: http://127.0.0.1:5173"
 echo "  Docs:     http://127.0.0.1:5174/docs/"
+echo "  Frontend: http://127.0.0.1:5173"
 echo ""
 
 while kill -0 "$BACKEND_PID" 2>/dev/null && kill -0 "$FRONTEND_PID" 2>/dev/null; do

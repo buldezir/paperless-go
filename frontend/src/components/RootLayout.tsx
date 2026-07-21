@@ -3,15 +3,18 @@ import { Link, Outlet } from '@tanstack/react-router'
 import {
   accentContrastText,
   ensureAuth,
+  getSetupStatus,
   getUserDisplayName,
   isSuperuser,
   logout,
   pb,
   pbAdminUrl,
+  type SetupStatus,
 } from '../lib/pocketbase'
 import { useAppMeta } from '../hooks/useAppMeta'
 import { AppFooter } from './AppFooter'
 import { LoginPage } from './LoginPage'
+import { SetupBlocked, SetupWizard } from './SetupWizard'
 
 const navLinkClass =
   'rounded-md px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-200/70 hover:text-stone-950'
@@ -39,51 +42,94 @@ function LogoutIcon() {
   )
 }
 
+type Gate =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'setup'; status: SetupStatus }
+  | { kind: 'login'; status: SetupStatus }
+  | { kind: 'blocked'; status: SetupStatus }
+  | { kind: 'app'; status: SetupStatus; superuser: boolean }
+
 export function RootLayout() {
-  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading')
-  const [superuser, setSuperuser] = useState(false)
+  const [gate, setGate] = useState<Gate>({ kind: 'loading' })
   const { appName, accent } = useAppMeta()
-  const userDisplayName = authState === 'authenticated' ? getUserDisplayName() : ''
+  const userDisplayName = gate.kind === 'app' ? getUserDisplayName() : ''
   const appInitial = appName.trim().charAt(0).toUpperCase() || 'P'
   const logoStyle = { backgroundColor: accent, color: accentContrastText(accent) }
+  const superuser = gate.kind === 'app' ? gate.superuser : false
+
+  async function resolveGate(): Promise<Gate> {
+    const status = await getSetupStatus()
+
+    if (status.needs_admin) {
+      return { kind: 'setup', status }
+    }
+
+    let authenticated = false
+    try {
+      await ensureAuth()
+      authenticated = pb.authStore.isValid
+    } catch {
+      authenticated = false
+    }
+
+    if (!authenticated) {
+      return { kind: 'login', status }
+    }
+
+    if (status.needs_config) {
+      if (isSuperuser()) {
+        return { kind: 'setup', status }
+      }
+      return { kind: 'blocked', status }
+    }
+
+    return { kind: 'app', status, superuser: isSuperuser() }
+  }
 
   useEffect(() => {
     let active = true
 
-    async function initAuth() {
+    async function init() {
       try {
-        await ensureAuth()
+        const next = await resolveGate()
+        if (active) setGate(next)
+      } catch (err) {
         if (active) {
-          setAuthState('authenticated')
-          setSuperuser(isSuperuser())
-        }
-      } catch {
-        if (active) {
-          setAuthState('unauthenticated')
-          setSuperuser(false)
+          setGate({
+            kind: 'error',
+            message: err instanceof Error ? err.message : 'Failed to load setup status',
+          })
         }
       }
     }
 
-    void initAuth()
-
+    void init()
     return () => {
       active = false
     }
   }, [])
 
   useEffect(() => {
-    if (authState === 'loading') {
+    if (gate.kind === 'loading' || gate.kind === 'error') {
       return
     }
 
     return pb.authStore.onChange(() => {
-      setAuthState(pb.authStore.isValid ? 'authenticated' : 'unauthenticated')
-      setSuperuser(isSuperuser())
+      void (async () => {
+        try {
+          setGate(await resolveGate())
+        } catch (err) {
+          setGate({
+            kind: 'error',
+            message: err instanceof Error ? err.message : 'Failed to load setup status',
+          })
+        }
+      })()
     })
-  }, [authState])
+  }, [gate.kind])
 
-  if (authState === 'loading') {
+  if (gate.kind === 'loading') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm text-stone-500">
         Loading...
@@ -91,14 +137,64 @@ export function RootLayout() {
     )
   }
 
-  if (authState === 'unauthenticated') {
+  if (gate.kind === 'error') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-stone-100 px-6 text-center">
+        <p className="text-sm text-red-600">{gate.message}</p>
+        <button
+          type="button"
+          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+          onClick={() => {
+            setGate({ kind: 'loading' })
+            void resolveGate()
+              .then(setGate)
+              .catch((err) =>
+                setGate({
+                  kind: 'error',
+                  message: err instanceof Error ? err.message : 'Failed to load setup status',
+                }),
+              )
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  if (gate.kind === 'setup') {
+    return (
+      <SetupWizard
+        appName={appName}
+        accent={accent}
+        initialStatus={gate.status}
+        onComplete={() => {
+          void resolveGate().then(setGate)
+        }}
+      />
+    )
+  }
+
+  if (gate.kind === 'blocked') {
+    return (
+      <SetupBlocked
+        appName={appName}
+        accent={accent}
+        onLogout={() => {
+          logout()
+          void resolveGate().then(setGate)
+        }}
+      />
+    )
+  }
+
+  if (gate.kind === 'login') {
     return (
       <LoginPage
         appName={appName}
         accent={accent}
         onSuccess={() => {
-          setAuthState('authenticated')
-          setSuperuser(isSuperuser())
+          void resolveGate().then(setGate)
         }}
       />
     )
